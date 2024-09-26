@@ -3,10 +3,9 @@
 //#######################################
 prebuilt_etc {
     name: "com.nxp.nfc.nq.xml",
+    sub_dir: "permissions",
     src: "com.nxp.nfc.nq.xml",
     system_ext_specific: true,
-    // Install to /system/etc/permissions
-    sub_dir: "permissions",
 }
 
 java_library {
@@ -19,10 +18,14 @@ java_library {
         "com/**/I*.aidl",
         "com/**/*.java",
         "android/**/*.java",
+        // TODO(b/263565193): Temp hack until NFC APK can link against module_current.
+        //":framework-nfc-updatable-sources",
     ],
+
+    static_libs: ["framework-nfc.impl",],
+
     libs: [
-        "framework-nfc.impl",
-        "unsupportedappusage"
+        "unsupportedappusage",
     ]
 
 }
