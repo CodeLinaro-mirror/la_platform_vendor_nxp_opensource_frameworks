@@ -4,18 +4,14 @@ This Repo contains any additional information/files required to support the rele
 
 #### Git Repository
 
-| DESCRIPTION        | CHECKOUT COMMAND          |
-| :-------------: |:-------------:| 
-| nfcandroid_frameworks   |  git clone https://github.com/NXPNFCProject/nfcandroid_frameworks.git |
-
-#### Supported Version on "br_android_ncihalx_comm_16" branch
+#### Supported Version on "br_ar_16_aosp_mainline" branch
 | Android Version        | NXP Release          | NXP Tag  |
 | :-------------: |:---------------------:| :-----:|
-| aosp-main      |  16.02.00 (PN557/PN560/SN100/SN110/SN220/SN300) |  NFC_AR_00_7E800_16.02.00_OpnSrc "This is a preliminary release for specific use. Please DO NOT USE/INTEGRATE for commercial purposes. Use it for engineering and test purposes only. For any other purposes stick to the communicated release plan." |
-
-
-
-
+| aosp-main      |  16.03.00 (PN557/PN560/SN100/SN110/SN220/SN300) |  NFC_AR_00_7E800_16.03.00_OpnSrc |
+| aosp-main      |  16.04.00 (PN557/PN560/SN100/SN110/SN220/SN300) |  NFC_AR_00_7E800_16.04.00_OpnSrc |
+| aosp-main              |  16.05.00 (PN557/PN560/SN100/SN110/SN220/SN300) |  NFC_AR_00_7E800_16.05.00_OpnSrc |
+| aosp-main              |  16.06.00 (PN557/PN560/SN100/SN110/SN220/SN300) |  NFC_AR_00_7E800_16.06.00_OpnSrc (Beta4 Build no: BP22.250325.007) |
+| android-16.0.0_r2              |  16.07.00 (PN557/PN560/SN100/SN110/SN220/SN300) |  NFC_AR_00_7E800_16.07.00_OpnSrc |
 
 
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 NXP
+ * Copyright 2024-2025 NXP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,24 @@
  * limitations under the License.
  */
 
-package com.nxp.sems;
+package com.nxp.nfc;
 
-public class SemsGetLastExecStatus {
-  public String outScriptSignature;
-  public int status;
+/**
+ * @class NxpNfcConstants
+ * @brief A utility class for global constants used across the module
+ *
+ */
+public interface NxpNfcConstants {
+
+    int SEND_RAW_WAIT_TIME_OUT_VAL   = 4000;
+
+    int RF_PROTOCOL_ERR_CODE         = 0xB1;
+    int TIMEOUT_ERR_CODE             = 0xB2;
+    int RF_UNEXPECTED_DATA_ERR_CODE  = 0xB3;
+
+    int NFC_NCI_PROP_GID = 0x2F;
+    int NXP_NFC_PROP_OID = 0x70;
+
+    int STR_SET_FLAG_GID = 0x2F;
+    int STR_SET_FLAG_OID = 0x48;
 }
