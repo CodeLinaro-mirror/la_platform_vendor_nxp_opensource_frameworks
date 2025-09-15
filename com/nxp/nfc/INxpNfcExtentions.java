@@ -1,6 +1,5 @@
-/******************************************************************************
- *
- *  Copyright 2020 NXP
+/*
+ * Copyright 2025 NXP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,14 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 
 package com.nxp.nfc;
 
-import com.nxp.nfc.INxpWlcCallBack;
+import android.nfc.NfcAdapter;
+import com.nxp.nfc.NxpNfcExtentions;
+import com.nxp.nfc.vendor.ntag.INxpNfcNTag;
 
-interface INxpWlcAdapter {
-  void enableWlc(INxpWlcCallBack callback);
-  void disableWlc(INxpWlcCallBack callback);
-  boolean isWlcEnabled();
+/**
+ * @class INxpNfcExtentions
+ * @brief Interface to perform the NFC Extension functionality.
+ *
+ * @hide
+ */
+public interface INxpNfcExtentions {
+  /**
+   * @brief Creates the Instance of {@link NxpNfcExtentions}
+   * @param nfcAdapter
+   * @return None
+   */
+  public INxpNfcNTag getNxpNfcNTagInterface();
 }

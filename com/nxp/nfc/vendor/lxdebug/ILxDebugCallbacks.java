@@ -1,6 +1,8 @@
 /*
  *
- *  Copyright 2014,2023 NXP
+ *  The original Work has been changed by NXP.
+ *
+ *  Copyright 2025 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,15 +17,23 @@
  *  limitations under the License.
  *
  */
-package com.nxp.nfc;
 
-import android.os.Bundle;
-import android.content.Intent;
+package com.nxp.nfc.vendor.lxdebug;
 
 /**
- * {@hide}
+ * @interface ILxDebugDataCallbacks
+ * @brief Interface to perform LxDebug releated callbacks to apps.
+ *
  */
-interface INxpNfcAdapterExtras {
-    Bundle getAtr(in String pkg);
-    boolean accessControlForCOSU (int mode);
+public interface ILxDebugCallbacks {
+    /**
+     * This callback triggers when EFDM timer got expired .
+     */
+    void onEFDMTimedout();
+
+    /**
+     * This callback triggers on receiving the LX Debug data.
+     * @param lxDebugData : LX Dbug data received from NFCC
+     */
+    void onLxDebugDataReceived(byte[] lxDebugData);
 }
