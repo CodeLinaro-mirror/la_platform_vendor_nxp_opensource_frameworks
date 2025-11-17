@@ -1,652 +1,354 @@
 /*
+ * Copyright 2024-2025 NXP
  *
- *  The original Work has been changed by NXP.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *  Copyright 2013-2022, 2023-2024 NXP
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
 package com.nxp.nfc;
 
-import java.util.HashMap;
-import java.util.Map;
-import android.nfc.INfcAdapter;
+import android.app.Activity;
+import android.content.Context;
 import android.nfc.NfcAdapter;
-import android.nfc.INfcAdapterExtras;
-import android.os.IBinder;
-import android.os.ServiceManager;
+import android.nfc.Tag;
 
-import java.io.IOException;
-import android.os.UserHandle;
+import com.nxp.nfc.vendor.fw.NfcFirmwareInfo;
+import com.nxp.nfc.vendor.lxdebug.ILxDebugCallbacks;
+import com.nxp.nfc.vendor.lxdebug.LxDebugEventHandler;
+import com.nxp.nfc.vendor.srd.ISrdCallbacks;
+import com.nxp.nfc.vendor.srd.SrdHandler;
+import com.nxp.nfc.vendor.utils.UtilsHandler;
+import com.nxp.nfc.vendor.autoCard.AutoCardHandler;
+import com.nxp.nfc.vendor.mpos.MposHandler;
+import com.nxp.nfc.vendor.qtag.QTagHandler;
+import com.nxp.nfc.vendor.transit.TransitConfigHandler;
+import com.nxp.nfc.INxpNfcAdapter.AutoCardStatus.*;
+import com.nxp.nfc.INxpNfcAdapter.SRDStatus.*;
 import android.os.RemoteException;
-import android.annotation.SystemApi;
-import android.annotation.RequiresPermission;
-
 import android.util.Log;
-import java.util.List;
-public final class NxpNfcAdapter {
-    private static final String TAG = "NXPNFC";
-    private static int ALL_SE_ID_TYPE = 0x07;
-    // Guarded by NfcAdapter.class
-    static boolean sIsInitialized = false;
+import java.io.IOException;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+/**
+ * @class NxpNfcAdapter
+ * @brief Concrete implementation of NFC Extension features
+ *
+ */
+public final class NxpNfcAdapter implements INxpNfcAdapter {
+    private static final String TAG = "NxpNfcAdapter";
 
     /**
-     * Flag for use with {@link #enableReaderMode(Activity, ReaderCallback, int,
-     * Bundle)}. <p> Setting this flag enables polling for Nfc-Q(Quiet tag)
-     * technology.
+     * @brief singleton instance object
      */
-    public static final int FLAG_READER_NFC_Q = 0x100;
+    private static NxpNfcAdapter sNxpNfcAdapter;
 
     /**
-     * The NfcAdapter object for each application context.
-     * There is a 1-1 relationship between application context and
-     * NfcAdapter object.
+     * @brief Reflection variables for loading {@link NxpNfcExtentions}
      */
-    static HashMap<NfcAdapter, NxpNfcAdapter> sNfcAdapters = new HashMap(); //guard by NfcAdapter.class
+    private Class mNxpNfcExtentionsClass;
+    private Object mNxpNfcExtentionsObj;
 
-    // Final after first constructor, except for
-    // attemptDeadServiceRecovery() when NFC crashes - we accept a best effort
-    // recovery
-    private static INfcAdapter sService;
-    private static INxpNfcAdapter sNxpService;
+    private NfcAdapter mNfcAdapter;
+    private AutoCardHandler mAutoCardHandler;
+    private MposHandler mMposHandler;
+    private QTagHandler mQTagHandler;
+    private LxDebugEventHandler mLxDebugEventHandler;
+    private TransitConfigHandler mTransitHandler;
+    private NfcFirmwareInfo mFwHandler;
+    private SrdHandler mSrdHandler;
+    private UtilsHandler mUtilsHandler;
 
-    private NxpNfcAdapter() {
+    private boolean mIsSrdMode = false;
+
+
+    /**
+     * @brief supported chipsets
+     */
+    private static final int NXP_EN_SN110U = 1;
+    private static final int NXP_EN_SN100U = 1;
+    private static final int NXP_EN_SN220U = 1;
+    private static final int NXP_EN_PN557 = 1;
+    private static final int NXP_EN_PN560 = 1;
+    private static final int NXP_EN_SN300U = 1;
+    private static final int NXP_EN_SN330U = 1;
+
+    private static final int NFC_NXP_MW_ANDROID_VER = 16; // Android version used by NFC MW
+    private static final int NFC_NXP_MW_VERSION_MAJ = 0x07; // MW Major Version
+    private static final int NFC_NXP_MW_VERSION_MIN = 0x00; // MW Minor Version
+    private static final int NFC_NXP_MW_CUSTOMER_ID = 0x00; // MW Customer ID
+    private static final int NFC_NXP_MW_RC_VERSION = 0x00; // MW RC Version
+    private static final int NFC_BUSY_IN_MPOS = 0x02;
+
+    private static void printComNxpNfcVersion() {
+        int validation = (NXP_EN_SN100U << 13);
+        validation |= (NXP_EN_SN110U << 14);
+        validation |= (NXP_EN_SN220U << 15);
+        validation |= (NXP_EN_PN560 << 16);
+        validation |= (NXP_EN_SN300U << 17);
+        validation |= (NXP_EN_SN330U << 18);
+        validation |= (NXP_EN_PN557 << 11);
+
+        String logMessage = String.format(
+            "NxpNfcJar Version: NXP_AR_%02X_%05X_%02d.%02X.%02X",
+            NFC_NXP_MW_CUSTOMER_ID, validation, NFC_NXP_MW_ANDROID_VER,
+            NFC_NXP_MW_VERSION_MAJ, NFC_NXP_MW_VERSION_MIN);
+        NxpNfcLogger.d(TAG, logMessage);
     }
-    /**
-     * Returns the NxpNfcAdapter for application context,
-     * or throws if NFC is not available.
-     * @hide
-     */
-    public static synchronized NxpNfcAdapter getNxpNfcAdapter(NfcAdapter adapter) {
-        if (!sIsInitialized) {
-            if (adapter == null) {
-                Log.v(TAG, "could not find NFC support");
-                throw new UnsupportedOperationException();
-            }
-            sService = getServiceInterface();
-            if (sService == null) {
-                Log.e(TAG, "could not retrieve NFC service");
-                throw new UnsupportedOperationException();
-            }
-            sNxpService = getNxpNfcAdapterInterface();
-             if (sNxpService == null) {
-                Log.e(TAG, "could not retrieve NXP NFC service");
-                throw new UnsupportedOperationException();
-            }
-            sIsInitialized = true;
-        }
-        NxpNfcAdapter nxpAdapter = sNfcAdapters.get(adapter);
-        if (nxpAdapter == null) {
-            nxpAdapter = new NxpNfcAdapter();
-            sNfcAdapters.put(adapter, nxpAdapter);
-        }
-        return nxpAdapter;
-    }
 
-    /** get handle to NFC service interface */
-    private static INfcAdapter getServiceInterface() {
-        /* get a handle to NFC service */
-        IBinder b = ServiceManager.getService("nfc");
-        if (b == null) {
-            return null;
-        }
-        return INfcAdapter.Stub.asInterface(b);
+    /**
+     * @brief private constructor to create the instance of {@link NxpNfcAdapter}
+     * @param nfcAdapter
+     * @param context
+     */
+    private NxpNfcAdapter(NfcAdapter nfcAdapter, Context context) {
+        printComNxpNfcVersion();
+        mNfcAdapter = nfcAdapter;
+        getNxpNfcExtnAdapter();
+        mAutoCardHandler = new AutoCardHandler(nfcAdapter);
+        mMposHandler = new MposHandler(nfcAdapter);
+        mQTagHandler = new QTagHandler(nfcAdapter);
+        mLxDebugEventHandler = new LxDebugEventHandler(nfcAdapter, context);
+        mTransitHandler = new TransitConfigHandler(nfcAdapter);
+        mFwHandler = new NfcFirmwareInfo(nfcAdapter);
+        mSrdHandler = new SrdHandler(nfcAdapter, context);
+        mUtilsHandler = new UtilsHandler(nfcAdapter, context);
     }
 
     /**
-     * NFC service dead - attempt best effort recovery
-     * @hide
+     * @brief Creates the Instance of {@link NxpNfcExtentions}
+     * @param nfcAdapter
+     * @return None
      */
-    private static void attemptDeadServiceRecovery(Exception e) {
-        Log.e(TAG, "Service dead - attempting to recover",e);
-        sIsInitialized = false;
-        INfcAdapter service = getServiceInterface();
-        if (service == null) {
-            Log.e(TAG, "could not retrieve NFC service during service recovery");
-            // nothing more can be done now, sService is still stale, we'll hit
-            // this recovery path again later
-            return;
-        }
-        // assigning to sService is not thread-safe, but this is best-effort code
-        // and on a well-behaved system should never happen
-        sService = service;
-        sNxpService = getNxpNfcAdapterInterface();
-        if (sNxpService != null) {
-            sIsInitialized = true;
-        }
-        return;
-    }
-    /**
-     * Set listen mode routing table configuration for Mifare Desfire Route.
-     * routeLoc is parameter which fetch the text from UI and compare
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     *
-     * @throws IOException If a failure occurred during Mifare Desfire Route
-     * set.
-     */
-    public void MifareDesfireRouteSet(String routeLoc, boolean fullPower,
-                                      boolean lowPower, boolean noPower)
-        throws IOException {
+    private void getNxpNfcExtnAdapter() {
       try {
-        int seID = 0;
-        boolean result = false;
-        if (routeLoc.equals(NfcConstants.UICC_ID)) {
-          seID = NfcConstants.UICC_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.UICC2_ID)) {
-          seID = NfcConstants.UICC2_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.SMART_MX_ID)) {
-          seID = NfcConstants.SMART_MX_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.HOST_ID)) {
-          seID = NfcConstants.HOST_ID_TYPE;
-        } else {
-          Log.e(TAG, "confMifareDesfireProtoRoute: wrong default route ID");
-          throw new IOException(
-              "confMifareProtoRoute failed: Wrong default route ID");
-        }
-        Log.i(TAG, "calling Services");
-        sNxpService.MifareDesfireRouteSet(seID, fullPower, lowPower, noPower);
-      } catch (RemoteException e) {
-        Log.e(TAG, "confMifareDesfireProtoRoute failed", e);
-        attemptDeadServiceRecovery(e);
-        throw new IOException("confMifareDesfireProtoRoute failed");
-      }
-    }
-    /**
-     * Set listen mode routing table configuration for MifareCLTRouteSet.
-     * routeLoc is parameter which fetch the text from UI and compare
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     *
-     * @throws IOException If a failure occurred during Mifare CLT Route set.
-     */
-    public void MifareCLTRouteSet(String routeLoc, boolean fullPower,
-                                  boolean lowPower, boolean noPower)
-        throws IOException {
-      try {
-        int seID = 0;
-        boolean result = false;
-        if (routeLoc.equals(NfcConstants.UICC_ID)) {
-          seID = NfcConstants.UICC_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.UICC2_ID)) {
-          seID = NfcConstants.UICC2_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.SMART_MX_ID)) {
-          seID = NfcConstants.SMART_MX_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.HOST_ID)) {
-          seID = NfcConstants.HOST_ID_TYPE;
-        } else {
-          Log.e(TAG, "confMifareCLT: wrong default route ID");
-          throw new IOException("confMifareCLT failed: Wrong default route ID");
-        }
-        sNxpService.MifareCLTRouteSet(seID, fullPower, lowPower, noPower);
-      } catch (RemoteException e) {
-        Log.e(TAG, "confMifareCLT failed", e);
-        attemptDeadServiceRecovery(e);
-        throw new IOException("confMifareCLT failed");
+        mNxpNfcExtentionsClass = Class.forName("com.nxp.nfc.NxpNfcExtentions");
+        logExtentionsInterface();
+        Constructor<?> nxpNfcExtentionsCon =
+            mNxpNfcExtentionsClass.getDeclaredConstructor(NfcAdapter.class);
+        mNxpNfcExtentionsObj = nxpNfcExtentionsCon.newInstance(mNfcAdapter);
+      } catch (ClassNotFoundException | InstantiationException |
+               IllegalAccessException | IllegalArgumentException |
+               InvocationTargetException | NoSuchMethodException e) {
+        NxpNfcLogger.e(TAG, "Error in Instantiating NxpNfcExtentions! Msg: " +
+                                e.getLocalizedMessage());
       }
     }
 
-     /**
-      * Set listen mode routing table configuration for NfcFRouteSet.
-      * routeLoc is parameter which fetch the text from UI and compare
-      * <p>Requires {@link android.Manifest.permission#NFC} permission.
-      *
-      * @throws IOException If a failure occurred during Felica Techno Route set.
-      */
-     public void NfcFRouteSet(String routeLoc, boolean fullPower,
-                                   boolean lowPower, boolean noPower)
-         throws IOException {
-       try {
-         int seID = 0;
-         boolean result = false;
-         if (routeLoc.equals(NfcConstants.UICC_ID)) {
-           seID = NfcConstants.UICC_ID_TYPE;
-         } else if (routeLoc.equals(NfcConstants.UICC2_ID)) {
-           seID = NfcConstants.UICC2_ID_TYPE;
-         } else if (routeLoc.equals(NfcConstants.SMART_MX_ID)) {
-           seID = NfcConstants.SMART_MX_ID_TYPE;
-         } else if (routeLoc.equals(NfcConstants.HOST_ID)) {
-           seID = NfcConstants.HOST_ID_TYPE;
-         } else {
-           Log.e(TAG, "confNfcF: wrong default route ID");
-           throw new IOException("confNfcF failed: Wrong default route ID");
-         }
-         sNxpService.NfcFRouteSet(seID, fullPower, lowPower, noPower);
-       } catch (RemoteException e) {
-         Log.e(TAG, "confNfcF failed", e);
-         attemptDeadServiceRecovery(e);
-         throw new IOException("confNfcF failed");
-       }
-     }
+    /**
+     * @brief method to print {@link INxpNfcAdapter} declared methods
+     * @return None
+     */
+    private void logExtentionsInterface() {
+      Method[] methods = mNxpNfcExtentionsClass.getDeclaredMethods();
+      NxpNfcLogger.d(TAG, "Total methods:" + methods.length);
+      for (Method method : methods) {
+        NxpNfcLogger.d(TAG, "Method: " + method.getName());
+      }
+    }
 
     /**
-     * @hide
+     * @brief getter for accessing {@link INxpNfcExtras}
+     * @return {@link INxpNfcExtras} instance
+     */
+    @Override
+    public INxpNfcExtentions getNxpNfcExtentionsInterface() {
+      if (mNxpNfcExtentionsObj != null)
+        return ((INxpNfcExtentions) mNxpNfcExtentionsObj);
+      return null;
+    }
+
+    public interface NxpReaderCallback {
+      void onNxpTagDiscovered(Tag tag, boolean isNxpTagDetected);
+    }
+
+    /**
+     * @brief NxpNfcAdapter for application context,
+     * or throws UnsupportedOperationException nfcAdapter is null.
+     *
+     * @param nfcAdapter
+     * @param context
+     * @return {@link NxpNfcAdapter} instance
+     */
+    public static synchronized NxpNfcAdapter getNxpNfcAdapter(NfcAdapter nfcAdapter, Context context) {
+        if (sNxpNfcAdapter == null) {
+            if (nfcAdapter == null) {
+                NxpNfcLogger.e(TAG, "nfcAdapter is null");
+                throw new UnsupportedOperationException();
+            }
+            sNxpNfcAdapter = new NxpNfcAdapter(nfcAdapter, context);
+        }
+        return sNxpNfcAdapter;
+    }
+
+    /**
+     * @brief NxpNfcAdapter for application context,
+     * or throws UnsupportedOperationException nfcAdapter is null.
+     *
+     * @param nfcAdapter
+     * @return {@link NxpNfcAdapter} instance
+     */
+    public static synchronized NxpNfcAdapter getNxpNfcAdapter(NfcAdapter nfcAdapter) {
+        return getNxpNfcAdapter(nfcAdapter, null);
+    }
+
+    /**
+     * @brief getter for accessing {@link INxpNfcAdapter}
+     * make sure to call {@link #getNxpNfcAdapter()} before calling this
+     * throws UnsupportedOperationException {@link #sNxpNfcAdapter} is null.
+     * @return {@link INxpNfcAdapter} instance
      */
     public static INxpNfcAdapter getNxpNfcAdapterInterface() {
-      if (sService == null) {
-        throw new UnsupportedOperationException(
-            "You need a reference from NfcAdapter to use the "
-            + " NXP NFC APIs");
-      }
-      try {
-        IBinder b = sService.getNfcAdapterVendorInterface("nxp");
-        if (b == null) {
-          return null;
+        if (sNxpNfcAdapter == null) {
+            throw new UnsupportedOperationException(
+                "You need a reference from NxpNfcAdapter to use the "
+                + " NXP NFC APIs");
         }
-        return INxpNfcAdapter.Stub.asInterface(b);
-      } catch (RemoteException e) {
-        return null;
-      }
+        return ((INxpNfcAdapter) sNxpNfcAdapter);
     }
 
     /**
-     * Change poll and listen technology
-     * Generic API is use to disable polling and enable speicific listening
-     * technology
-     * @param binder,pollTech, listenTech.
-     * @return void
-     * @hide
+     * @brief To be called to get the configured AID,s.
+     * @return {@link INxpNfcAdapter.getAutoCardAID} instance
      */
-    public void changeDiscoveryTech(IBinder binder, int pollTech,
-                                    int listenTech) throws IOException {
-      try {
-        sNxpService.changeDiscoveryTech(binder, pollTech, listenTech);
-      } catch (RemoteException e) {
-        Log.e(TAG, "changeDiscoveryTech failed", e);
-      }
+    @Override
+    public byte[] getAutoCardAID() throws IOException {
+      return mAutoCardHandler.getAutoCardAID();
     }
 
     /**
-     * This API is called by application to execute the analog self test
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
-     * </ul>
-     * @param  type, type of the analog slef test
-     * @return status
-     * @throws IOException If a failure occurred during nfcSelfTest
-     * @hide
+     * @brief To be called to set autocard AID's
+     * @return {@link INxpNfcAdapter.setAutoCardAID} instance
      */
-    public int nfcSelfTest(int type) throws IOException {
-        int status = 0xFF;
-        if (sNxpService == null) {
-        throw new UnsupportedOperationException(
-            "You need a context on NxpNfcAdapter to use the "
-            + " NXP NFC extras APIs");
-        }
-        try {
-            status = sNxpService.nfcSelfTest(type);
-        } catch(RemoteException e) {
-            Log.e(TAG, "RemoteException in nfcSelfTest(): ", e);
-            e.printStackTrace();
-            attemptDeadServiceRecovery(e);
-            throw new IOException("RemoteException in nfcSelfTest()");
-        }
-        return status;
-    }
-    /**
-     * @hide
-     */
-    public INxpNfcAdapterExtras getNxpNfcAdapterExtrasInterface() {
-      if (sNxpService == null) {
-        throw new UnsupportedOperationException(
-            "You need a context on NxpNfcAdapter to use the "
-            + " NXP NFC extras APIs");
-      }
-      try {
-        return sNxpService.getNxpNfcAdapterExtrasInterface();
-      } catch (RemoteException e) {
-        Log.e(TAG, "getNxpNfcAdapterExtrasInterface failed", e);
-        attemptDeadServiceRecovery(e);
-        return null;
-      } catch (Exception e) {
-        e.printStackTrace();
-        return null;
-      }
+    @Override
+    public @AutoCardStatus int setAutoCardAID(byte[] aids, int cmaReadyCount)
+        throws IOException {
+      return mAutoCardHandler.setAutoCardAID(aids, cmaReadyCount);
     }
 
     /**
-     * This is the first API to be called to start or stop the mPOS mode
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
-     * <li>This api shall be called only when there are no NFC transactions
-     * ongoing
-     * </ul>
-     * @param  pkg package name of the caller
-     * @param  on Sets/Resets the mPOS state.
-     * @return whether the update of state is
-     *          success or busy or fail.
-     *          MPOS_STATUS_BUSY
-     *          MPOS_STATUS_REJECTED
-     *          MPOS_STATUS_SUCCESS
-     * @throws IOException If a failure occurred during reader mode set or reset
+     * @brief To be called to start or stop the mPOS reader mode
+     * @return {@link INxpNfcAdapter.mPOSSetReaderMode} instance
      */
-    @RequiresPermission(android.Manifest.permission.NFC)
+    @Override
     public int mPOSSetReaderMode(String pkg, boolean on) throws IOException {
-      try {
-        return sNxpService.mPOSSetReaderMode(pkg, on);
-      } catch (RemoteException e) {
-        Log.e(TAG, "RemoteException in mPOSSetReaderMode (int state): ", e);
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        throw new IOException(
-            "RemoteException in mPOSSetReaderMode (int state)");
-      }
+      return mMposHandler.mPOSSetReaderMode(pkg, on);
     }
 
     /**
-     * This is provides the info whether mPOS mode is activated or not
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
-     * <li>This api shall be called only when there are no NFC transactions ongoing
-     * </ul>
-     * @param  pkg package name of the caller
-     * @return TRUE if reader mode is started
-     *          FALSE if reader mode is not started
-     * @throws IOException If a failure occurred during reader mode set or reset
+     * @brief This is provides the info whether mPOS mode is activated or not
+     * @return {@link INxpNfcAdapter.mPOSGetReaderMode} instance
      */
-    @RequiresPermission(android.Manifest.permission.NFC)
+    @Override
     public boolean mPOSGetReaderMode(String pkg) throws IOException {
-      try {
-        return sNxpService.mPOSGetReaderMode(pkg);
-      } catch (RemoteException e) {
-        Log.e(TAG, "RemoteException in mPOSGetReaderMode (): ", e);
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        throw new IOException("RemoteException in mPOSGetReaderMode ()");
-      }
+      return mMposHandler.mPOSGetReaderMode(pkg);
     }
 
     /**
-     * This is the first API to be called to configure the SCR mode
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
-     * <li>This api shall be called only when there are no NFC transactions
-     * ongoing
-     * </ul>
-     * @param  on Sets/Resets the Secure Reader state.
-     * @param  Requested reader type. e.g. Mifare Classic Reader("MFC")
-     * @return whether the update of state is
-     *          success or busy or fail or rejected.
-     *          SCR_STATUS_BUSY
-     *          SCR_STATUS_REJECTED
-     *          SCR_STATUS_SUCCESS
-     *          SCR_STATUS_FAILED
-     * @throws IOException If a failure occurred during reader mode set or reset
+     * @brief To be called to enable QTag
+     * @return {@link INxpNfcAdapter.enableQTag} instance
      */
-    @RequiresPermission(android.Manifest.permission.NFC)
-    public int configureSecureReader(boolean on, String readerType)
+    @Override
+    public int enableQTag(Activity activity, NxpReaderCallback mQTagCallback,
+                          int mode, int pollTech, int delay_value)
         throws IOException {
-      try {
-        return sNxpService.configureSecureReader(on, readerType);
-      } catch (RemoteException e) {
-        Log.e(TAG, "RemoteException in configureSecureReader (int state): ", e);
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        throw new IOException(
-            "RemoteException in configureSecureReader (int state)");
-      }
+      return mQTagHandler.enableQTag(activity, mode, mQTagCallback, pollTech,
+                                     delay_value);
     }
 
     /**
-     * This API is called by application to stop RF discovery
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
-     * </ul>
-     * @param  pkg package name of the caller
-     * @param  mode
-     *         LOW_POWER
-     *         ULTRA_LOW_POWER
-     * @return None
-     * @throws IOException If a failure occurred during stop discovery
-    */
-    public void stopPoll(String pkg, int mode) throws IOException {
-        try {
-            sNxpService.stopPoll(pkg, mode);
-        } catch(RemoteException e) {
-            Log.e(TAG, "RemoteException in stopPoll(int mode): ", e);
-            e.printStackTrace();
-            attemptDeadServiceRecovery(e);
-            throw new IOException("RemoteException in stopPoll(int mode)");
-        }
-    }
-
-    /**
-     * This API is called by application to start RF discovery
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
-     * </ul>
-     * @param  pkg package name of the caller
-     * @return None
-     * @throws IOException If a failure occurred during start discovery
-    */
-    public void startPoll(String pkg) throws IOException {
-        try {
-            sNxpService.startPoll(pkg);
-        } catch(RemoteException e) {
-            Log.e(TAG, "RemoteException in startPoll(): ", e);
-            e.printStackTrace();
-            attemptDeadServiceRecovery(e);
-            throw new IOException("RemoteException in startPoll()");
-        }
-    }
-
-    /**
-     * Get the Active Secure Element List
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     *
-     * @throws IOException If a failure occurred during the
-     * getActiveSecureElementList()
+     * @brief To be called to set NCI configuration
+     * @return {@link INxpNfcAdapter.mTransitHandler} instance
      */
-    public String[] getActiveSecureElementList(String pkg) throws IOException {
-      int[] activeSEList;
-      String[] arr;
-      try {
-        Log.d(TAG, "getActiveSecureElementList-Enter");
-        activeSEList = sNxpService.getActiveSecureElementList(pkg);
-        if (activeSEList != null && activeSEList.length != 0) {
-          arr = new String[activeSEList.length];
-          for (int i = 0; i < activeSEList.length; i++) {
-            Log.e(TAG,
-                  "getActiveSecureElementList activeSE[i]" + activeSEList[i]);
-            if (activeSEList[i] == NfcConstants.SMART_MX_ID_TYPE) {
-              arr[i] = NfcConstants.SMART_MX_ID;
-            } else if (activeSEList[i] == NfcConstants.UICC_ID_TYPE) {
-              arr[i] = NfcConstants.UICC_ID;
-            } else if (activeSEList[i] == NfcConstants.UICC2_ID_TYPE) {
-              arr[i] = NfcConstants.UICC2_ID;
-            } else if (activeSEList[i] == NfcConstants.EUICC1_ID_TYPE) {
-              arr[i] = NfcConstants.EUICC1_ID;
-            } else if (activeSEList[i] == NfcConstants.EUICC2_ID_TYPE) {
-              arr[i] = NfcConstants.EUICC2_ID;
-            } else if (activeSEList[i] == NfcConstants.T4T_ID_TYPE) {
-              arr[i] = NfcConstants.T4T_ID;
-            } else {
-              throw new IOException("No Secure Element Activeted");
-            }
-          }
-        } else {
-          arr = new String[0];
-        }
-        return arr;
-      } catch (RemoteException e) {
-        Log.e(TAG, "getActiveSecureElementList: failed", e);
-        attemptDeadServiceRecovery(e);
-        throw new IOException(
-            "Failure in deselecting the selected Secure Element");
-      }
+    @Override
+    public boolean setConfig(String configs) throws IOException {
+      return mTransitHandler.setConfig(configs);
     }
 
     /**
-     * Set listen mode routing table configuration for Default Route.
-     * routeLoc is parameter which fetch the text from UI and compare
-     * * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * @throws IOException If a failure occurred during Default Route Route set.
+     * @brief This api is called to get current FW version.
+     * @return {@link INxpNfcAdapter.NfcFirmwareInfo} instance
      */
-    public void DefaultRouteSet(String routeLoc, boolean fullPower,
-                                boolean lowPower, boolean noPower)
-        throws IOException {
-      try {
-        int seID = 0;
-        boolean result = false;
-        if (routeLoc.equals(NfcConstants.UICC_ID)) {
-          seID = NfcConstants.UICC_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.UICC2_ID)) {
-          seID = NfcConstants.UICC2_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.SMART_MX_ID)) {
-          seID = NfcConstants.SMART_MX_ID_TYPE;
-        } else if (routeLoc.equals(NfcConstants.HOST_ID)) {
-          seID = NfcConstants.HOST_ID_TYPE;
-        } else {
-          Log.e(TAG, "DefaultRouteSet: wrong default route ID");
-          throw new IOException(
-              "DefaultRouteSet failed: Wrong default route ID");
-        }
-        sNxpService.DefaultRouteSet(seID, fullPower, lowPower, noPower);
-      } catch (RemoteException e) {
-        Log.e(TAG, "confsetDefaultRoute failed", e);
-        attemptDeadServiceRecovery(e);
-        throw new IOException("confsetDefaultRoute failed");
-      }
-    }
-
-    /**
-     * This api is called by applications to get the maximum routing table for
-     * AID registration The returned value doesn't provide the current remaining
-     * size available for AID. This value depends on the size available in NFCC
-     * and is constant. <p>Requires {@link android.Manifest.permission#NFC}
-     * permission.
-     * @return maximum routing table size for AID registration.
-     * @throws  IOException if any exception occurs while retrieving the size.
-     */
-    public int getMaxAidRoutingTableSize() throws IOException{
-        try{
-            return sNxpService.getMaxAidRoutingTableSize();
-        }catch(RemoteException e){
-            e.printStackTrace();
-            attemptDeadServiceRecovery(e);
-            return 0x00;
-        }
-    }
-
-    /**
-     * This api is called by applications to get the size of AID data which is already committed
-     * to routing table in NFCC.
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * @return  occupied size of routing table for AID registrations.
-     * @throws  IOException if any exception occurs while retrieving the size.
-     */
-    public int getCommittedAidRoutingTableSize() throws IOException{
-        try{
-            return sNxpService.getCommittedAidRoutingTableSize();
-        }catch(RemoteException e){
-            e.printStackTrace();
-            attemptDeadServiceRecovery(e);
-            return 0x00;
-        }
-    }
-
-    /**
-     * Get the current NFCC firware version.
-     * @return 2 byte array with Major ver(0 index) adn Minor ver(1 index)
-     */
+    @Override
     public byte[] getFwVersion() throws IOException {
-      try {
-        return sNxpService.getFWVersion();
-      } catch (RemoteException e) {
-        Log.e(TAG, "RemoteException in getFwVersion(): ", e);
-        attemptDeadServiceRecovery(e);
-        throw new IOException("RemoteException in getFwVersion()");
-      }
+        return mFwHandler.getFwVersion();
     }
 
     /**
-     * This api is called by applications to update the NFC configurations which
-     * are already part of libnfc-nxp.conf and libnfc-brcm.conf <p>Requires
-     * {@link android.Manifest.permission#NFC} permission.<ul> <li>This api
-     * shall be called only Nfcservice is enabled. <li>This api shall be called
-     * only when there are no NFC transactions ongoing
-     * </ul>
-     * @param  configs NFC Configuration to be updated.
-     * @param  pkg package name of the caller
-     * @return whether  the update of configuration is
-     *          success or not.
-     *          0xFF - failure
-     *          0x00 - success
-     * @throws  IOException if any exception occurs during setting the NFC
-     * configuration.
+     * This API registers the callback to get Field Detected Events.
+     * @param callbacks : callback object to be register.
      */
-    public int setConfig(String configs, String pkg) throws IOException {
-      try {
-        return sNxpService.setConfig(configs, pkg);
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0xFF;
-      }
+    @Override
+    public void registerLxDebugCallbacks(ILxDebugCallbacks callbacks) {
+        mLxDebugEventHandler.registerLxDebugCallbacks(callbacks);
     }
+
     /**
-     * This api is called by applications to select the UICC slot. Selected Slot
-     * will be activated for all type of CE from UICC.
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only Nfcservice is enabled.
-     * </ul>
-     * @param  uicc slot number to select
-     * @return whether  the update of configuration is
-     *          success or not.
-     *          0xFF - failure
-     *          0x00 - success
-     * @throws  IOException if any exception occurs during setting the NFC
-     * configuration.
+     * This API unregisters the Application callbacks to be called
+     * for LxDebug notifications.
      */
-    public int selectUicc(int uiccSlot) throws IOException {
-      try {
-        return sNxpService.selectUicc(uiccSlot);
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0xFF;
-      }
+    @Override
+    public void unregisterLxDebugCallbacks() {
+        mLxDebugEventHandler.unregisterLxDebugCallbacks();
     }
+
     /**
-     * This api is called by applications to get Selected UICC slot. Selected
-     * Slot will be used for all type of CE from UICC. <p>Requires {@link
-     * android.Manifest.permission#NFC} permission.<ul> <li>This api shall be
-     * called only Nfcservice is enabled.
-     * </ul>
-     * @param  uicc slot number to select
-     * @return whether  the update of configuration is
-     *          success or not.
-     *          0xFF - failure
-     *          0x00 - success
-     * @throws  IOException if any exception occurs during setting the NFC
-     * configuration.
+     * This API starts extended field detect mode.
+     * @param detectionTimeout : The time after 1st RF ON to
+     *                            exit extended field detect mode(msec).
+     * @return status     :-0x00 :EFDSTATUS_SUCCESS
+     *                      0x01 :EFDSTATUS_FAILED
+     *                      0x02 :EFDSTATUS_ERROR_ALREADY_STARTED
+     *                      0x03 :EFDSTATUS_ERROR_FEATURE_NOT_SUPPORTED
+     *                      0x04 :EFDSTATUS_ERROR_FEATURE_DISABLED_IN_CONFIG
+     *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
+     *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
      */
-    public int getSelectedUicc() throws IOException {
-      try {
-        return sNxpService.getSelectedUicc();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0xFF;
-      }
+    @Override
+    public int startExtendedFieldDetectMode(int detectionTimeout) {
+        return mLxDebugEventHandler.startExtendedFieldDetectMode(detectionTimeout);
     }
+
+    /**
+     * @return status     :-0x00 :EFDSTATUS_SUCCESS
+     *                      0x01 :EFDSTATUS_FAILED
+     *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
+     *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
+     *                      0x07 :EFDSTATUS_ERROR_NOT_STARTED
+     */
+    @Override
+    public int stopExtendedFieldDetectMode() {
+        return mLxDebugEventHandler.stopExtendedFieldDetectMode();
+    }
+
+    /**
+     * This API starts card emulation mode. Starts RF Discovery with Default
+     * POLL & Listen configurations
+     * @return status     :-0x00 :EFDSTATUS_SUCCESS
+     *                      0x01 :EFDSTATUS_FAILED
+     *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
+     *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
+     */
+    @Override
+    public int startCardEmulation() {
+        return mLxDebugEventHandler.startCardEmulation();
+    }
+
     /**
      * This api is called by applications enable or disable field
      * detect feauture.
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only Nfcservice is enabled.
-
-     * </ul>
-     * @param  Mode to Enable(true) and Disable(false)
+     * This api shall be called only Nfcservice is enabled.
+     * @param  mode to Enable(true) and Disable(false)
      * @return whether  the update of configuration is
      *          success or not with reason.
      *          0x01  - NFC_IS_OFF,
@@ -655,38 +357,26 @@ public final class NxpNfcAdapter {
      *          0x00  - SUCCESS
      * @throws  IOException if any exception occurs during setting the NFC configuration.
      */
-    public int setFieldDetectMode(boolean mode) {
-      try {
-        return sNxpService.setFieldDetectMode(mode);
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0x03; /*ERROR_UNKNOWN*/
-      }
+    @Override
+    public int setFieldDetectMode(boolean mode) throws IOException {
+        if (mPOSGetReaderMode(TAG)) {
+            NxpNfcLogger.e(TAG, "NFC Busy in MPOS");
+            return NFC_BUSY_IN_MPOS;
+        }
+        return mLxDebugEventHandler.setFieldDetectMode(mode);
     }
 
     /**
-     * This api is called by applications to check whether field
      * detect feature is enabled or not
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only Nfcservice is enabled.
-
-     * </ul>
-     * @param  None
      * @return whether  the feature is enabled(true) disabled (false)
      *          success or not.
      *          Enabled  - true
      *          Disabled - false
      * @throws  IOException if any exception occurs during setting the NFC configuration.
      */
+    @Override
     public boolean isFieldDetectEnabled() {
-      try {
-        return sNxpService.isFieldDetectEnabled();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return false;
-      }
+        return mLxDebugEventHandler.isFieldDetectEnabled();
     }
 
     /**
@@ -694,10 +384,7 @@ public final class NxpNfcAdapter {
      * Once RSSI is enabled, RSSI data notifications are broadcasted to registered
      * application when the device is in the reader field. Application can then
      * analyze this data and find best position for transaction.
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only after Nfcservice is enabled.
-
-     * </ul>
+     * This api shall be called only after Nfcservice is enabled.
      * @param  rssiNtfTimeIntervalInMillisec to set time interval between RSSI
      * notification in milliseconds. It is recommended that this value is
      * greater than 10 millisecs and multiple of 10.
@@ -709,23 +396,18 @@ public final class NxpNfcAdapter {
      *          0x00  - SUCCESS
      * @throws  IOException if any exception occurs during setting the NFC configuration.
      */
-    public int startRssiMode(int rssiNtfTimeIntervalInMillisec) {
-      try {
-        return sNxpService.startRssiMode(rssiNtfTimeIntervalInMillisec);
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0x03; /*ERROR_UNKNOWN*/
-      }
+    @Override
+    public int startRssiMode(int rssiNtfTimeIntervalInMillisec) throws IOException {
+        if (mPOSGetReaderMode(TAG)) {
+            NxpNfcLogger.e(TAG, "NFC Busy in MPOS");
+            return NFC_BUSY_IN_MPOS;
+        }
+        return mLxDebugEventHandler.startRssiMode(rssiNtfTimeIntervalInMillisec);
     }
 
     /**
      * This api is called by applications to stop RSSI mode
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only after Nfcservice is enabled.
-
-     * </ul>
-     * @param  None
+     * This api shall be called only after Nfcservice is enabled.
      * @return whether  the update of configuration is
      *          success or not with reason.
      *          0x01  - NFC_IS_OFF,
@@ -734,39 +416,60 @@ public final class NxpNfcAdapter {
      *          0x00  - SUCCESS
      * @throws  IOException if any exception occurs during setting the NFC configuration.
      */
-    public int stopRssiMode() {
-      try {
-        return sNxpService.stopRssiMode();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0x03; /*ERROR_UNKNOWN*/
-      }
+    @Override
+    public int stopRssiMode() throws IOException {
+        if (mPOSGetReaderMode(TAG)) {
+            NxpNfcLogger.e(TAG, "NFC Busy in MPOS");
+            return NFC_BUSY_IN_MPOS;
+        }
+        return mLxDebugEventHandler.stopRssiMode();
     }
 
     /**
      * This api is called by applications to check whether RSSI is enabled or not
-     * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only after Nfcservice is enabled.
-
-     * </ul>
-     * @param  None
      * @return whether  the feature is enabled(true) disabled (false)
      *          success or not.
      *          Enabled  - true
      *          Disabled - false
      * @throws  IOException if any exception occurs during setting the NFC configuration.
      */
-    public boolean isRssiEnabled() {
-      try {
-        return sNxpService.isRssiEnabled();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return false;
-      }
+    @Override
+    public boolean isRssiEnabled() throws IOException {
+        return mLxDebugEventHandler.isRssiEnabled();
     }
 
+    /**
+     * This api is called by application to enable various debug notigications
+     * of NFCC.
+     * This api shall be called only if Nfcservice is enabled.
+     * @return whether  the update of configuration is
+     *          success or not.
+     *          0x00 - success
+     *          0x01 - NFC is not initialized
+     *          0x03 - NFCC command failed
+     *          0xFF - Service Unavialable
+     */
+    @Override
+    public int enableDebugNtf(byte fieldValue) {
+        return mLxDebugEventHandler.enableDebugNtf(fieldValue);
+    }
+    /**
+     * This API registers the callback to SRD Events.
+     * @param callbacks : callback object to be register.
+     */
+    @Override
+    public void registerSrdCallbacks(ISrdCallbacks callbacks) {
+        mSrdHandler.registerSrdCallbacks(callbacks);
+    }
+
+    /**
+     * This API unregisters the Application callbacks to be called
+     * for SRD notifications.
+     */
+    @Override
+    public void unregisterSrdCallbacks() {
+        mSrdHandler.unregisterSrdCallbacks();
+    }
     /**
      * This api is called by applications to Activate Secure Element Interface.
      * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
@@ -781,13 +484,11 @@ public final class NxpNfcAdapter {
      * configuration.
      */
     public int activateSeInterface() throws IOException {
-      try {
-        return sNxpService.activateSeInterface();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0xFF;
-      }
+        if (mIsSrdMode) {
+            return mSrdHandler.activateSeInterface();
+        } else {
+            return mUtilsHandler.activateSeInterface();
+        }
     }
     /**
      * This api is called by applications to Deactivate Secure Element Interface.
@@ -803,119 +504,48 @@ public final class NxpNfcAdapter {
      * configuration.
      */
     public int deactivateSeInterface() throws IOException {
-      try {
-        return sNxpService.deactivateSeInterface();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0xFF;
-      }
+        if (mIsSrdMode) {
+            mIsSrdMode = false;
+            return mSrdHandler.deactivateSeInterface();
+        } else {
+            return mUtilsHandler.deactivateSeInterface();
+        }
     }
 
     /**
-     * This API performs writes of T4T data to Nfcee.
-     * @param fileId File Id to which to write
-     * @param data data bytes to be written
-     * @param length current data length
-     * @return number of bytes written if success else negative number of
-                error code listed as here .
-                -1  STATUS_FAILED
-                -2  ERROR_RF_ACTIVATED
-                -3  ERROR_MPOS_ON
-                -4  ERROR_NFC_NOT_ON
-                -5  ERROR_INVALID_FILE_ID
-                -6  ERROR_INVALID_LENGTH
-                -7  ERROR_CONNECTION_FAILED
-                -8  ERROR_EMPTY_PAYLOAD
-                -9  ERROR_NDEF_VALIDATION_FAILED
-     * <p>Requires {@link   android.Manifest.permission#NFC} permission.
-     */
-    public int doWriteT4tData(byte[] fileId, byte[] data, int length) {
-      try {
-        return sNxpService.doWriteT4tData(fileId, data, length);
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return -1;
-      }
+     * This API is called by application to stop RF discovery
+     * <p>Requires {@link android.Manifest.permission#NFC} permission.
+     * <li>This api shall be called only Nfcservice is enabled.
+     * </ul>
+     * @param  mode
+     *         LOW_POWER
+     *         ULTRA_LOW_POWER
+     *         SRD MODE
+     * @return None
+     * @throws IOException If a failure occurred during stop discovery
+    */
+    public void stopPoll(int mode) throws IOException {
+        if (mode == 0x03) { //SRD Mode
+            mIsSrdMode = true;
+            mSrdHandler.stopPoll();
+        } else {
+            mUtilsHandler.stopPoll();
+        }
     }
 
     /**
-     * This API performs reading of T4T content of Nfcee.
-     * @param fileId : File Id from which to read
-     * @return read bytes :-Returns read message if success
-     *                      Returns null if failed to read
-     *                      Returns 0xFF if file is empty.
-     * <p>Requires {@link   android.Manifest.permission#NFC} permission.
-     */
-    public byte[] doReadT4tData(byte[] fileId) {
-      try {
-        return sNxpService.doReadT4tData(fileId);
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return null;
-      }
-    }
-    /**
-     * This API starts extended field detect mode.
-     * @param detectionTimeout : The time after 1st RF ON to
-     *                            exit extended filed detect mode(msec).
-     * @return status     :-0x00 :EFDSTATUS_SUCCESS
-     *                      0x01 :EFDSTATUS_FAILED
-     *                      0x02 :EFDSTATUS_ERROR_ALREADY_STARTED
-     *                      0x03 :EFDSTATUS_ERROR_FEATURE_NOT_SUPPORTED
-     *                      0x04 :EFDSTATUS_ERROR_FEATURE_DISABLED_IN_CONFIG
-     *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
-     *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
-     * <p>Requires {@link   android.Manifest.permission#NFC} permission.
-     */
-    public int startExtendedFieldDetectMode(int detectionTimeout) {
-      try {
-        return sNxpService.startExtendedFieldDetectMode(detectionTimeout);
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0x06; /*EFDSTATUS_ERROR_UNKNOWN*/
-      }
-    }
-    /**
-     * This API stops extended field detect mode.
-     * @return status     :-0x00 :EFDSTATUS_SUCCESS
-     *                      0x01 :EFDSTATUS_FAILED
-     *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
-     *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
-     *                      0x07 :EFDSTATUS_ERROR_NOT_STARTED
-     * <p>Requires {@link   android.Manifest.permission#NFC} permission.
-     */
-    public int stopExtendedFieldDetectMode() {
-      try {
-        return sNxpService.stopExtendedFieldDetectMode();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0x06; /*EFDSTATUS_ERROR_UNKNOWN*/
-      }
-    }
-
-    /**
-     * This API starts card emulation mode. Starts RF Discovery with Default
-     * POLL & Listen configurations
-     * @return status     :-0x00 :EFDSTATUS_SUCCESS
-     *                      0x01 :EFDSTATUS_FAILED
-     *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
-     *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
-     *                      0x07 :EFDSTATUS_ERROR_NOT_STARTED
-     * <p>Requires {@link   android.Manifest.permission#NFC} permission.
-     */
-    @SystemApi
-    public int startCardEmulation() {
-      try {
-        return sNxpService.startCardEmulation();
-      } catch (RemoteException e) {
-        e.printStackTrace();
-        attemptDeadServiceRecovery(e);
-        return 0x06; /*EFDSTATUS_ERROR_UNKNOWN*/
-      }
+     * This API is called by application to start RF discovery
+     * <p>Requires {@link android.Manifest.permission#NFC} permission.
+     * <li>This api shall be called only Nfcservice is enabled.
+     * </ul>
+     * @return None
+     * @throws IOException If a failure occurred during start discovery
+    */
+    public void startPoll() throws IOException {
+        if (mIsSrdMode) {
+            mSrdHandler.startPoll();
+        } else {
+            mUtilsHandler.startPoll();
+        }
     }
 }

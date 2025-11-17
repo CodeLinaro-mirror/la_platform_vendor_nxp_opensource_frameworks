@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2024 NXP
+ * Copyright 2019-2025 NXP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,19 +18,18 @@ package com.nxp.sems;
 
 import android.content.Context;
 import android.util.Log;
+import com.nxp.sems.ISemsCallback;
+import com.nxp.sems.SemsException;
+import com.nxp.sems.SemsExecutionStatus;
+import com.nxp.sems.SemsExecutor;
+import com.nxp.sems.SemsStatus;
+import com.nxp.sems.channel.ISemsApduChannel;
+import com.nxp.sems.channel.SemsApduChannelFactory;
+import com.nxp.sems.channel.SemsOmapiApduChannel;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-
-import com.nxp.sems.channel.ISemsApduChannel;
-import com.nxp.sems.channel.SemsApduChannelFactory;
-import com.nxp.sems.channel.SemsOmapiApduChannel;
-import com.nxp.sems.SemsException;
-import com.nxp.sems.SemsExecutor;
-import com.nxp.sems.ISemsCallback;
-import com.nxp.sems.SemsStatus;
-import com.nxp.sems.SemsExecutionStatus;
 
 public final class SemsAgent {
   public static final String TAG = "SEMS-SemsAgent";
@@ -40,7 +39,7 @@ public final class SemsAgent {
   public static final byte SEMS_STATUS_DENIED = 0x03;
   public static final byte SEMS_STATUS_UNKNOWN = 0x0F;
   public static final byte SEMS_STATUS_HASH_INVALID = 0x04;
-  public String SEMS_HASH_TYPE_SHA1   = "SHA1";
+  public String SEMS_HASH_TYPE_SHA1 = "SHA1";
   public String SEMS_HASH_TYPE_SHA256 = "SHA256";
   public static final short major = 1;
   public static final short minor = 7;
@@ -53,6 +52,24 @@ public final class SemsAgent {
   private SemsExecutor mExecutor = null;
   public static Object semsObj = new Object();
   public static boolean flagSemsObj = false;
+
+  /**
+   * @brief supported chipsets
+   */
+  private static final int NXP_EN_SN110U = 1;
+  private static final int NXP_EN_SN100U = 1;
+  private static final int NXP_EN_SN220U = 1;
+  private static final int NXP_EN_PN557 = 1;
+  private static final int NXP_EN_PN560 = 1;
+  private static final int NXP_EN_SN300U = 1;
+  private static final int NXP_EN_SN330U = 1;
+
+  private static final int NFC_NXP_MW_ANDROID_VER = 16; // Android version used by NFC MW
+  private static final int NFC_NXP_MW_VERSION_MAJ = 0x07; // MW Major Version
+  private static final int NFC_NXP_MW_VERSION_MIN = 0x00; // MW Minor Version
+  private static final int NFC_NXP_MW_CUSTOMER_ID = 0x00; // MW Customer ID
+  private static final int NFC_NXP_MW_RC_VERSION = 0x00; // MW RC Version
+
   /**
    * Returns SemsAgent singleton object
    * <br/>
@@ -77,7 +94,23 @@ public final class SemsAgent {
     }
   }
 
-  private SemsAgent() {}
+  private static void printSemsVersion() {
+    int validation = (NXP_EN_SN100U << 13);
+    validation |= (NXP_EN_SN110U << 14);
+    validation |= (NXP_EN_SN220U << 15);
+    validation |= (NXP_EN_PN560 << 16);
+    validation |= (NXP_EN_SN300U << 17);
+    validation |= (NXP_EN_SN330U << 18);
+    validation |= (NXP_EN_PN557 << 11);
+
+    String version = String.format(
+        "SEMS Version: NXP_AR_%02X_%05X_%02d.%02X.%02X",
+        NFC_NXP_MW_CUSTOMER_ID, validation, NFC_NXP_MW_ANDROID_VER,
+        NFC_NXP_MW_VERSION_MAJ, NFC_NXP_MW_VERSION_MIN);
+    Log.d(TAG, version);
+  }
+
+  private SemsAgent() { printSemsVersion();}
 
   /**
    * Perform secure SEMS script execution
@@ -111,7 +144,8 @@ public final class SemsAgent {
    * @return {@code status} 0 in SUCCESS, otherwise 1 in failure
    */
   public int SemsExecuteScript(String inputScriptBuffer, String outputFilename,
-                               ISemsCallback callback, ISemsAuthCallback semsAuthCallback)
+                               ISemsCallback callback,
+                               ISemsAuthCallback semsAuthCallback)
       throws SemsException {
     return SemsExecuteScript(inputScriptBuffer, outputFilename, callback,
                              DEFAULT_TERMINAL_ID, semsAuthCallback);
@@ -149,8 +183,9 @@ public final class SemsAgent {
    * @return {@code status} 0 in SUCCESS, otherwise 1 in failure.
    */
   public int SemsExecuteScript(String inputScriptBuffer, String outputFilename,
-    ISemsCallback callback, byte omapiTerminalId,
-    ISemsAuthCallback semsAuthCallback) throws SemsException {
+                               ISemsCallback callback, byte omapiTerminalId,
+                               ISemsAuthCallback semsAuthCallback)
+      throws SemsException {
     sTerminalID = omapiTerminalId;
     if (inputScriptBuffer == null) {
       throw new SemsException("Invalid/Null Input script");
@@ -158,8 +193,8 @@ public final class SemsAgent {
     mSemsApduChannel = SemsApduChannelFactory.getInstance(
         SemsApduChannelFactory.OMAPI_CHANNEL, sContext, sTerminalID);
     mExecutor = SemsExecutor.getInstance(mSemsApduChannel, sContext);
-    SemsStatus status =
-        mExecutor.executeScript(inputScriptBuffer, outputFilename, callback, semsAuthCallback);
+    SemsStatus status = mExecutor.executeScript(
+        inputScriptBuffer, outputFilename, callback, semsAuthCallback);
     if (status == SemsStatus.SEMS_STATUS_SUCCESS) {
       return SEMS_STATUS_SUCCESS;
     } else {
@@ -182,10 +217,12 @@ public final class SemsAgent {
    *                     0x0f in Unknown error.
    */
   public int SemsExecuteScript(String inputScriptBuffer, String outputFilename,
-      ISemsAuthCallback semsAuthCallback) throws SemsException {
+                               ISemsAuthCallback semsAuthCallback)
+      throws SemsException {
     SemsExecutionStatus.mSemsExecutionStatus = SEMS_STATUS_FAILED;
     int status = SemsExecuteScript(inputScriptBuffer, outputFilename,
-                    new SemsExecutionStatus() ,DEFAULT_TERMINAL_ID, semsAuthCallback);
+                                   new SemsExecutionStatus(),
+                                   DEFAULT_TERMINAL_ID, semsAuthCallback);
     if (status == SEMS_STATUS_SUCCESS) {
       synchronized (semsObj) {
         while (!flagSemsObj) {
@@ -251,8 +288,7 @@ public final class SemsAgent {
    */
   public String SemsGetOutputData(String outputFilename) throws SemsException {
     try {
-      SemsExecutor mExecutor =
-          SemsExecutor.getInstance(null, sContext);
+      SemsExecutor mExecutor = SemsExecutor.getInstance(null, sContext);
       return mExecutor.getSemsOutputResponse(outputFilename);
     } catch (Exception e) {
       throw new SemsException("Unable to fetch Sems response");
@@ -265,17 +301,15 @@ public final class SemsAgent {
    * @return {@code SemsGetLastExecStatus object}
    *      outScriptSignature : SEMS lib will provide the Authentication frame
    *             signature of the last executed script. Application can use this
-   *             info to match with local SEMS script, useful in multiple application
-   *             context.
-   *      status:
-   *      0x00 - Success, The input script has been completely executed
-   *      0x01 - Failed, The input script execution was interrupted
-   *             because of teardown
+   *             info to match with local SEMS script, useful in multiple
+   * application context. status: 0x00 - Success, The input script has been
+   * completely executed 0x01 - Failed, The input script execution was
+   * interrupted because of teardown
    */
   public SemsGetLastExecStatus GetLastSemsExecuteStatus() throws SemsException {
     try {
       mSemsApduChannel = SemsApduChannelFactory.getInstance(
-           SemsApduChannelFactory.OMAPI_CHANNEL, sContext, sTerminalID);
+          SemsApduChannelFactory.OMAPI_CHANNEL, sContext, sTerminalID);
       mExecutor = SemsExecutor.getInstance(mSemsApduChannel, sContext);
       return mExecutor.getLastSemsExecuteStatus();
     } catch (Exception e) {
@@ -311,13 +345,14 @@ public final class SemsAgent {
    * From SEMS
    * @param Hash algorithm type used by SEMS
    * to set
-   * @return {@code status} 0 in SUCCESS, otherwise SEMS_STATUS_HASH_INVALID in failure
+   * @return {@code status} 0 in SUCCESS, otherwise SEMS_STATUS_HASH_INVALID in
+   *     failure
    */
   public int SetHashAlgorithm(String semsHashAlgoType) throws SemsException {
     Log.d(TAG, "SetHashAlgorithm");
     try {
-      if ((semsHashAlgoType != SEMS_HASH_TYPE_SHA1)
-          && (semsHashAlgoType != SEMS_HASH_TYPE_SHA256)) {
+      if ((semsHashAlgoType != SEMS_HASH_TYPE_SHA1) &&
+          (semsHashAlgoType != SEMS_HASH_TYPE_SHA256)) {
         return SEMS_STATUS_HASH_INVALID;
       }
       mSemsApduChannel = SemsApduChannelFactory.getInstance(
