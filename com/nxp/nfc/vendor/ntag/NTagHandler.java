@@ -1,5 +1,5 @@
 /*
- *  Copyright 2025 NXP
+ *  Copyright 2025-2026 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,21 +17,19 @@
 
 package com.nxp.nfc.vendor.ntag;
 
+import android.annotation.IntDef;
 import android.app.Activity;
 import android.nfc.NfcAdapter;
-import android.nfc.Tag;
-import android.os.Bundle;
 import com.nxp.nfc.INxpNfcNtfHandler;
+import com.nxp.nfc.NxpNfcAdapter.NxpNTagStatusCallback;
 import com.nxp.nfc.NxpNfcConstants;
 import com.nxp.nfc.NxpNfcLogger;
 import com.nxp.nfc.NxpNfcUtils;
-import com.nxp.nfc.core.NfcOperations;
 import com.nxp.nfc.core.NxpNciPacketHandler;
-import com.nxp.nfc.vendor.ntag.INxpNfcNTag.NTagMode;
-import com.nxp.nfc.vendor.ntag.INxpNfcNTag.NTagStatus;
-import com.nxp.nfc.vendor.ntag.NxpNfcNTag;
-import com.nxp.nfc.vendor.ntag.NxpNfcNTag.NxpNTagStatusCallback;
 import java.io.IOException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class NTagHandler implements INxpNfcNtfHandler {
@@ -39,7 +37,30 @@ public class NTagHandler implements INxpNfcNtfHandler {
   private final NxpNciPacketHandler mNxpNciPacketHandler;
   private NfcAdapter mNfcAdapter;
   private NxpNTagStatusCallback mNTagStatusCallback;
-  // private final NfcOperations mNfcOperations;
+  private static final ExecutorService NTAG_CALLBACK_EXECUTOR =
+                        Executors.newSingleThreadExecutor();
+
+  public static final int ENABLE_NTAG = 0x01;
+  public static final int DISABLE_NTAG = 0x00;
+
+  public static final int STATUS_SUCCESS = 0x00;
+  public static final int STATUS_FAILED = 0x01;
+
+  @IntDef(value =
+              {
+                  ENABLE_NTAG,
+                  DISABLE_NTAG,
+              })
+  @Retention(RetentionPolicy.SOURCE)
+  public @interface NTagMode {}
+
+  @IntDef(value =
+              {
+                  STATUS_SUCCESS,
+                  STATUS_FAILED,
+              })
+  @Retention(RetentionPolicy.SOURCE)
+  public @interface NTagStatus {}
 
   public enum NTagStatusCode {
     Success(0x00),
@@ -129,9 +150,6 @@ public class NTagHandler implements INxpNfcNtfHandler {
     if (!sIsQPollEnabled)
       return false;
 
-    mNxpNciPacketHandler.registerCallback(Executors.newSingleThreadExecutor(),
-                                          this);
-
     try {
       NxpNfcLogger.d(TAG, "Sending VendorNciMessage for isNTagModeEnabled");
       byte[] ntag = {(byte)(QTAG_SUB_GID | NTagSubOid.NTagEnableStatus.value),
@@ -185,8 +203,6 @@ public class NTagHandler implements INxpNfcNtfHandler {
 
     synchronized (ntagSync) { sNTagDetected = false; }
 
-    mNxpNciPacketHandler.registerCallback(Executors.newSingleThreadExecutor(),
-                                          this);
     try {
       NxpNfcLogger.d(TAG, "Sending VendorNciMessage");
       byte[] vendorRsp = mNxpNciPacketHandler.sendVendorNciMessage(
@@ -195,10 +211,13 @@ public class NTagHandler implements INxpNfcNtfHandler {
       if (vendorRsp != null && vendorRsp.length > 0 &&
           vendorRsp[1] == NfcAdapter.SEND_VENDOR_NCI_STATUS_SUCCESS) {
         status = NTagStatusCode.Success.value;
-        if (qMode == NTagSubOid.Disable.value)
+        if (qMode == NTagSubOid.Disable.value) {
           sIsQPollEnabled = false;
-        else
+          mNxpNciPacketHandler.unregisterNtfCallback(this);
+        } else {
           sIsQPollEnabled = true;
+          mNxpNciPacketHandler.registerNtfCallback(NTAG_CALLBACK_EXECUTOR, this);
+        }
       } else {
         NxpNfcLogger.e(TAG, "setNTagMode failed!!");
         status = NTagStatusCode.Failed.value;

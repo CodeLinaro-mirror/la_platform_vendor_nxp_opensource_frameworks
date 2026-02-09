@@ -13,8 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-soong_namespace {}
-
 prebuilt_etc {
     name: "com.nxp.nfc.xml",
     sub_dir: "permissions",
@@ -24,6 +22,7 @@ prebuilt_etc {
 java_library {
     name: "com.nxp.nfc",
     installable: true,
+    enabled: false,
     required: ["com.nxp.nfc.xml"],
     srcs: [
         "com/**/I*.aidl",
