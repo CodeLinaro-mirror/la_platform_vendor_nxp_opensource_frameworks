@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright 2022-2024 NXP
+ *  Copyright 2022-2024, 2026 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@
 #include "Nfc.h"
 
 #include <android-base/logging.h>
+#include <memunreachable/memunreachable.h>
 
 #include "NfcExtns.h"
 #include "phNfcStatus.h"
 #include "phNxpConfig.h"
 #include "phNxpNciHal_Adaptation.h"
 #include "phNxpNciHal_ext.h"
-
 #define CHK_STATUS(x) \
   ((x) == NFCSTATUS_SUCCESS) ? (NfcStatus::OK) : (NfcStatus::FAILED)
 
@@ -42,6 +42,7 @@ void OnDeath(void* cookie) {
   if (Nfc::mCallback != nullptr &&
       !AIBinder_isAlive(Nfc::mCallback->asBinder().get())) {
     std::lock_guard<std::mutex> lk(syncNfcOpenClose);
+    phNxpNciHal_configDiscIdle();
     LOG(INFO) << __func__ << " Nfc service has died";
     Nfc* nfc = static_cast<Nfc*>(cookie);
     nfc->close(NfcCloseType::DISABLE);
@@ -176,6 +177,12 @@ void OnDeath(void* cookie) {
 ::ndk::ScopedAStatus Nfc::isVerboseLoggingEnabled(bool* _aidl_return) {
   *_aidl_return = phNxpNciHal_getVerboseLogging();
   return ndk::ScopedAStatus::ok();
+}
+binder_status_t Nfc::dump(int /* fd */, const char** /* p */,
+                          uint32_t /* q */) {
+  LOG(INFO) << "\n NFC AIDL HAL MemoryLeak Info = \n"
+            << ::android::GetUnreachableMemoryString(true, 10000).c_str();
+  return STATUS_OK;
 }
 
 ::ndk::ScopedAStatus Nfc::controlGranted(NfcStatus* _aidl_return) {
