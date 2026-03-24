@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,26 +20,30 @@ import android.app.Activity;
 import android.content.Context;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
-
+import android.os.RemoteException;
+import android.util.Log;
+import com.nxp.nfc.INxpNfcAdapter.AutoCardStatus.*;
+import com.nxp.nfc.INxpNfcAdapter.SRDStatus.*;
+import com.nxp.nfc.vendor.autoCard.AutoCardHandler;
+import com.nxp.nfc.vendor.dualAntenna.DualAntennaHandler;
+import com.nxp.nfc.vendor.dualAntenna.DualAntennaHandler.DualAntennaStatus;
+import com.nxp.nfc.vendor.dualAntenna.DualAntennaHandler.ReaderModeStatus;
 import com.nxp.nfc.vendor.fw.NfcFirmwareInfo;
 import com.nxp.nfc.vendor.lxdebug.ILxDebugCallbacks;
 import com.nxp.nfc.vendor.lxdebug.LxDebugEventHandler;
+import com.nxp.nfc.vendor.mpos.MposHandler;
+import com.nxp.nfc.vendor.ntag.NTagHandler;
+import com.nxp.nfc.vendor.ntag.NTagHandler.NTagMode;
+import com.nxp.nfc.vendor.ntag.NTagHandler.NTagStatus;
+import com.nxp.nfc.vendor.qtag.QTagHandler;
 import com.nxp.nfc.vendor.srd.ISrdCallbacks;
 import com.nxp.nfc.vendor.srd.SrdHandler;
-import com.nxp.nfc.vendor.utils.UtilsHandler;
-import com.nxp.nfc.vendor.autoCard.AutoCardHandler;
-import com.nxp.nfc.vendor.mpos.MposHandler;
-import com.nxp.nfc.vendor.qtag.QTagHandler;
 import com.nxp.nfc.vendor.transit.TransitConfigHandler;
-import com.nxp.nfc.INxpNfcAdapter.AutoCardStatus.*;
-import com.nxp.nfc.INxpNfcAdapter.SRDStatus.*;
-import android.os.RemoteException;
-import android.util.Log;
+import com.nxp.nfc.vendor.utils.UtilsHandler;
 import java.io.IOException;
-
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 /**
  * @class NxpNfcAdapter
  * @brief Concrete implementation of NFC Extension features
@@ -54,10 +58,10 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     private static NxpNfcAdapter sNxpNfcAdapter;
 
     /**
-     * @brief Reflection variables for loading {@link NxpNfcExtentions}
+     * @brief Reflection variables for loading {@link NxpNfcExtensions}
      */
-    private Class mNxpNfcExtentionsClass;
-    private Object mNxpNfcExtentionsObj;
+    private Class mNxpNfcExtensionsClass;
+    private Object mNxpNfcExtensionsObj;
 
     private NfcAdapter mNfcAdapter;
     private AutoCardHandler mAutoCardHandler;
@@ -68,6 +72,8 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     private NfcFirmwareInfo mFwHandler;
     private SrdHandler mSrdHandler;
     private UtilsHandler mUtilsHandler;
+    private DualAntennaHandler mDualAntennaHandler;
+    private NTagHandler mNTagHandler;
 
     private boolean mIsSrdMode = false;
 
@@ -83,8 +89,8 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     private static final int NXP_EN_SN300U = 1;
     private static final int NXP_EN_SN330U = 1;
 
-    private static final int NFC_NXP_MW_ANDROID_VER = 16; // Android version used by NFC MW
-    private static final int NFC_NXP_MW_VERSION_MAJ = 0x07; // MW Major Version
+    private static final int NFC_NXP_MW_ANDROID_VER = 17; // Android version used by NFC MW
+    private static final int NFC_NXP_MW_VERSION_MAJ = 0x03; // MW Major Version
     private static final int NFC_NXP_MW_VERSION_MIN = 0x00; // MW Minor Version
     private static final int NFC_NXP_MW_CUSTOMER_ID = 0x00; // MW Customer ID
     private static final int NFC_NXP_MW_RC_VERSION = 0x00; // MW RC Version
@@ -116,31 +122,33 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
         mNfcAdapter = nfcAdapter;
         getNxpNfcExtnAdapter();
         mAutoCardHandler = new AutoCardHandler(nfcAdapter);
-        mMposHandler = new MposHandler(nfcAdapter);
+        mMposHandler = new MposHandler(nfcAdapter, context);
         mQTagHandler = new QTagHandler(nfcAdapter);
         mLxDebugEventHandler = new LxDebugEventHandler(nfcAdapter, context);
         mTransitHandler = new TransitConfigHandler(nfcAdapter);
         mFwHandler = new NfcFirmwareInfo(nfcAdapter);
         mSrdHandler = new SrdHandler(nfcAdapter, context);
         mUtilsHandler = new UtilsHandler(nfcAdapter, context);
+        mDualAntennaHandler = new DualAntennaHandler(nfcAdapter);
+        mNTagHandler = new NTagHandler(nfcAdapter);
     }
 
     /**
-     * @brief Creates the Instance of {@link NxpNfcExtentions}
+     * @brief Creates the Instance of {@link NxpNfcExtensions}
      * @param nfcAdapter
      * @return None
      */
     private void getNxpNfcExtnAdapter() {
       try {
-        mNxpNfcExtentionsClass = Class.forName("com.nxp.nfc.NxpNfcExtentions");
-        logExtentionsInterface();
-        Constructor<?> nxpNfcExtentionsCon =
-            mNxpNfcExtentionsClass.getDeclaredConstructor(NfcAdapter.class);
-        mNxpNfcExtentionsObj = nxpNfcExtentionsCon.newInstance(mNfcAdapter);
+        mNxpNfcExtensionsClass = Class.forName("com.nxp.nfc.NxpNfcExtensions");
+        logExtensionsInterface();
+        Constructor<?> nxpNfcExtensionsCon =
+            mNxpNfcExtensionsClass.getDeclaredConstructor(NfcAdapter.class);
+        mNxpNfcExtensionsObj = nxpNfcExtensionsCon.newInstance(mNfcAdapter);
       } catch (ClassNotFoundException | InstantiationException |
                IllegalAccessException | IllegalArgumentException |
                InvocationTargetException | NoSuchMethodException e) {
-        NxpNfcLogger.e(TAG, "Error in Instantiating NxpNfcExtentions! Msg: " +
+        NxpNfcLogger.e(TAG, "Error in Instantiating NxpNfcExtensions! Msg: " +
                                 e.getLocalizedMessage());
       }
     }
@@ -149,23 +157,12 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
      * @brief method to print {@link INxpNfcAdapter} declared methods
      * @return None
      */
-    private void logExtentionsInterface() {
-      Method[] methods = mNxpNfcExtentionsClass.getDeclaredMethods();
+    private void logExtensionsInterface() {
+      Method[] methods = mNxpNfcExtensionsClass.getDeclaredMethods();
       NxpNfcLogger.d(TAG, "Total methods:" + methods.length);
       for (Method method : methods) {
         NxpNfcLogger.d(TAG, "Method: " + method.getName());
       }
-    }
-
-    /**
-     * @brief getter for accessing {@link INxpNfcExtras}
-     * @return {@link INxpNfcExtras} instance
-     */
-    @Override
-    public INxpNfcExtentions getNxpNfcExtentionsInterface() {
-      if (mNxpNfcExtentionsObj != null)
-        return ((INxpNfcExtentions) mNxpNfcExtentionsObj);
-      return null;
     }
 
     public interface NxpReaderCallback {
@@ -217,6 +214,10 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
         return ((INxpNfcAdapter) sNxpNfcAdapter);
     }
 
+    public interface AutoCardStatusCallback {
+      void AutocardAppletStatusNtf(byte[] appletStatus);
+    }
+
     /**
      * @brief To be called to get the configured AID,s.
      * @return {@link INxpNfcAdapter.getAutoCardAID} instance
@@ -227,13 +228,71 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     }
 
     /**
+     * @brief To be called to set autocard counters
+     * @return {@link INxpNfcAdapter.setAutoCardCounters} instance
+     */
+    @Override
+    public @AutoCardStatus
+    int enableAutoCard(AutoCardStatusCallback mAutoCardStatusCallback)
+        throws IOException {
+      return mAutoCardHandler.enableAutoCard(mAutoCardStatusCallback);
+    }
+
+    /**
+     * @brief To be called to get the configured AID,s.
+     * @return {@link INxpNfcAdapter.disableAutoCard} instance
+     */
+    @Override
+    public @AutoCardStatus int disableAutoCard() throws IOException {
+      return mAutoCardHandler.disableAutoCard();
+    }
+
+    /**
      * @brief To be called to set autocard AID's
      * @return {@link INxpNfcAdapter.setAutoCardAID} instance
      */
     @Override
-    public @AutoCardStatus int setAutoCardAID(byte[] aids, int cmaReadyCount)
+    public @AutoCardStatus int setAutoCardAID(byte[] aids) throws IOException {
+      return mAutoCardHandler.setAutoCardAID(aids);
+    }
+
+    /**
+     * @brief To be called to get the configured AID RF parameters.
+     * @return {@link INxpNfcAdapter.getAutoCardAID} instance
+     */
+    @Override
+    public byte[] getAutoCardRfParams() throws IOException {
+      return mAutoCardHandler.getAutoCardRfParams();
+    }
+
+    /**
+     * @brief To be called to set autocard AID RF parameters.
+     * @return {@link INxpNfcAdapter.setAutoCardRfParams} instance
+     */
+    @Override
+    public @AutoCardStatus int setAutoCardRfParams(byte[] aids)
         throws IOException {
-      return mAutoCardHandler.setAutoCardAID(aids, cmaReadyCount);
+      return mAutoCardHandler.setAutoCardRfParams(aids);
+    }
+
+    /**
+     * @brief To be called to set autocard AID's
+     * @return {@link INxpNfcAdapter.setAutoCardAppletStatus} instance
+     */
+    @Override
+    public @AutoCardStatus int setAutoCardAppletStatus(byte[] appletStatus)
+        throws IOException {
+      return mAutoCardHandler.setAutoCardAppletStatus(appletStatus);
+    }
+
+    /**
+     * @brief To be called to set autocard AID's
+     * @return {@link INxpNfcAdapter.suspendAutoCard} instance
+     */
+    @Override
+    public @AutoCardStatus int suspendAutoCard(boolean flag)
+        throws IOException {
+      return mAutoCardHandler.suspendAutoCard(flag);
     }
 
     /**
@@ -341,13 +400,27 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
      */
     @Override
     public int startCardEmulation() {
-        return mLxDebugEventHandler.startCardEmulation();
+      return mLxDebugEventHandler.startCardEmulation(0x00);
+    }
+
+    /**
+     * This API starts card emulation mode. Starts RF Discovery with Default
+     * POLL configurations and sets the Listen tech parameters.
+     * @param listenTech Flags indicating listen technologies.
+     * @return status     :-0x00 :EFDSTATUS_SUCCESS
+     *                      0x01 :EFDSTATUS_FAILED
+     *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
+     *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
+     */
+    @Override
+    public int startCardEmulation(int listenTech) {
+      return mLxDebugEventHandler.startCardEmulation(listenTech);
     }
 
     /**
      * This api is called by applications enable or disable field
-     * detect feauture.
-     * This api shall be called only Nfcservice is enabled.
+     * detect feature.
+     * This api shall be called only NfcService is enabled.
      * @param  mode to Enable(true) and Disable(false)
      * @return whether  the update of configuration is
      *          success or not with reason.
@@ -384,7 +457,7 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
      * Once RSSI is enabled, RSSI data notifications are broadcasted to registered
      * application when the device is in the reader field. Application can then
      * analyze this data and find best position for transaction.
-     * This api shall be called only after Nfcservice is enabled.
+     * This api shall be called only after NfcService is enabled.
      * @param  rssiNtfTimeIntervalInMillisec to set time interval between RSSI
      * notification in milliseconds. It is recommended that this value is
      * greater than 10 millisecs and multiple of 10.
@@ -407,7 +480,7 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
 
     /**
      * This api is called by applications to stop RSSI mode
-     * This api shall be called only after Nfcservice is enabled.
+     * This api shall be called only after NfcService is enabled.
      * @return whether  the update of configuration is
      *          success or not with reason.
      *          0x01  - NFC_IS_OFF,
@@ -439,9 +512,9 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     }
 
     /**
-     * This api is called by application to enable various debug notigications
+     * @deprecated This api is called by application to enable various debug notigications
      * of NFCC.
-     * This api shall be called only if Nfcservice is enabled.
+     * This api shall be called only if NfcService is enabled.
      * @return whether  the update of configuration is
      *          success or not.
      *          0x00 - success
@@ -449,8 +522,27 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
      *          0x03 - NFCC command failed
      *          0xFF - Service Unavialable
      */
+    @Deprecated
     @Override
     public int enableDebugNtf(byte fieldValue) {
+        return mLxDebugEventHandler.enableDebugNtf(fieldValue);
+    }
+    /**
+     * This api is called by application to enable various debug notigications
+     * of NFCC.
+     * This api shall be called only if NfcService is enabled.
+     * @param fieldValue : bytes to be set for lxdebug config.
+     * @return whether  the update of configuration is
+     *          success or not.
+     *          0x00 - success
+     *          0x01 - NFC is not initialized
+     *          0x03 - NFCC command failed
+     *          0x04 - Invalid argument In case of fieldValue
+     *                 is not 2 bytes.
+     *          0xFF - Service Unavialable
+     */
+    @Override
+    public int enableDebugNtf(byte[] fieldValue) {
         return mLxDebugEventHandler.enableDebugNtf(fieldValue);
     }
     /**
@@ -473,7 +565,7 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     /**
      * This api is called by applications to Activate Secure Element Interface.
      * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @return whether  the update of configuration is
      *          success or not.
@@ -493,7 +585,7 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     /**
      * This api is called by applications to Deactivate Secure Element Interface.
      * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @return whether  the update of configuration is
      *          success or not.
@@ -504,18 +596,15 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
      * configuration.
      */
     public int deactivateSeInterface() throws IOException {
-        if (mIsSrdMode) {
+        if (mIsSrdMode)
             mIsSrdMode = false;
-            return mSrdHandler.deactivateSeInterface();
-        } else {
-            return mUtilsHandler.deactivateSeInterface();
-        }
+        return mUtilsHandler.deactivateSeInterface();
     }
 
     /**
      * This API is called by application to stop RF discovery
      * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @param  mode
      *         LOW_POWER
@@ -536,7 +625,7 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     /**
      * This API is called by application to start RF discovery
      * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @return None
      * @throws IOException If a failure occurred during start discovery
@@ -547,5 +636,85 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
         } else {
             mUtilsHandler.startPoll();
         }
+    }
+
+    /**
+     * @brief To be called to check feature is supported or not
+     * @return {@link INxpNfcDualAntenna.isDualAnetannaSupported} instance
+     */
+    @Override
+    public boolean isDualAnetannaSupported() throws IOException {
+      return mDualAntennaHandler.isDualAnetannaSupported();
+    }
+
+    /**
+     * @brief To be called to configure the antenna's with different polling
+     * @return {@link
+     *     INxpNfcDualAntenna.setDiscoveryTechnology_DualAntenna} instance
+     */
+    @Override
+    public @DualAntennaStatus int setDiscoveryTechnology_DualAntenna(int tech1,
+                                                                     int tech2)
+        throws IOException {
+      return mDualAntennaHandler.setDiscoveryTechnology_DualAntenna(tech1,
+                                                                    tech2);
+    }
+
+    /**
+     * @brief To be called to enable reader mode on either antenna's.
+     * @return {@link INxpNfcDualAntenna.setPollingMode_DualAntenna}
+     *     instance
+     */
+    @Override
+    public @DualAntennaStatus int
+    setPollingMode_DualAntenna(@ReaderModeStatus int ant1,
+                               @ReaderModeStatus int ant2) throws IOException {
+      return mDualAntennaHandler.setPollingMode_DualAntenna(ant1, ant2);
+    }
+
+    /**
+     * @brief To be called to get the discovery technology on both antennas.
+     * @return {@link INxpNfcDualAntenna.getDiscoveryTechnology_DualAntenna}
+     *     instance
+     */
+    @Override
+    public @DualAntennaStatus int[] getDiscoveryTechnology_DualAntenna()
+        throws IOException {
+      return mDualAntennaHandler.getDiscoveryTechnology_DualAntenna();
+    }
+
+    /**
+     * @brief To be called to get the polling mode of both antennas.
+     * @return {@link INxpNfcDualAntenna.getDiscoveryTechnology_DualAntenna}
+     *     instance
+     */
+    @Override
+    public @DualAntennaStatus int getPollingMode_DualAntenna()
+        throws IOException {
+      return mDualAntennaHandler.getPollingMode_DualAntenna();
+    }
+
+    public interface NxpNTagStatusCallback {
+      void onNTagDiscovered(byte[] uid, boolean isNTagDetected);
+    }
+
+    /**
+     * @brief This is provides the info whether NTag mode is enabled or not
+     * @return {@link INxpNfcNTag.isNTagEnabled} instance
+     */
+    @Override
+    public boolean isNTagEnabled() throws IOException {
+      return mNTagHandler.isNTagEnabled();
+    }
+
+    /**
+     * @brief To be called to enable NTag
+     * @return {@link INxpNfcNTag.setNTagMode} instance
+     */
+    @Override
+    public @NTagStatus int
+    setNTagMode(Activity activity, NxpNTagStatusCallback mNTagStatusCallback,
+                @NTagMode int mode) throws IOException {
+      return mNTagHandler.setNTagMode(activity, mNTagStatusCallback, mode);
     }
 }

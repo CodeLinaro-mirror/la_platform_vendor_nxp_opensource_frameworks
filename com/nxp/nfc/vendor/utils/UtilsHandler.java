@@ -23,20 +23,20 @@ package com.nxp.nfc.vendor.utils;
 import android.content.Context;
 import android.nfc.NfcAdapter;
 
-import com.nxp.nfc.NxpNfcLogger;
 import com.nxp.nfc.core.NfcOperations;
 import com.nxp.nfc.core.NxpNciPacketHandler;
+import com.nxp.nfc.INxpOEMCallbacks;
+import com.nxp.nfc.NxpNfcLogger;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
  * This class is responsible to control utils api calls
  */
-public class UtilsHandler  {
+public class UtilsHandler implements INxpOEMCallbacks {
 
     private static final String TAG = "UtilsHandler";
     private final NfcOperations mNfcOperations;
@@ -64,7 +64,7 @@ public class UtilsHandler  {
     /**
      * This api is called by applications to Activate Secure Element Interface.
      * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @return whether  the update of configuration is
      *          success or not.
@@ -82,7 +82,7 @@ public class UtilsHandler  {
     /**
      * This api is called by applications to Deactivate Secure Element Interface.
      * <p>Requires {@link android.Manifest.permission#NFC} permission.<ul>
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @return whether  the update of configuration is
      *          success or not.
@@ -100,22 +100,24 @@ public class UtilsHandler  {
     /**
      * This API is called by application to stop RF discovery
      * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @return None
      * @throws IOException If a failure occurred during stop discovery
     */
     public void stopPoll() throws IOException {
         NxpNfcLogger.d(TAG, "Entry stopPoll");
+        mNfcOperations.registerNxpOemCallback(this);
         if (mNfcOperations.isDiscoveryStarted()) {
             mNfcOperations.disableDiscovery();
         }
+        mNfcOperations.unregisterNxpOemCallback();
     }
 
     /**
      * This API is called by application to start RF discovery
      * <p>Requires {@link android.Manifest.permission#NFC} permission.
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * </ul>
      * @return None
      * @throws IOException If a failure occurred during start discovery

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,18 @@
 
 package com.nxp.nfc;
 
-import android.app.Activity;
-
-import com.nxp.nfc.NxpNfcAdapter.NxpReaderCallback;
-import com.nxp.nfc.vendor.lxdebug.ILxDebugCallbacks;
-import com.nxp.nfc.vendor.srd.ISrdCallbacks;
-
-import java.io.IOException;
 import android.annotation.IntDef;
+import android.app.Activity;
+import com.nxp.nfc.NxpNfcAdapter.AutoCardStatusCallback;
+import com.nxp.nfc.NxpNfcAdapter.NxpNTagStatusCallback;
+import com.nxp.nfc.NxpNfcAdapter.NxpReaderCallback;
+import com.nxp.nfc.vendor.dualAntenna.DualAntennaHandler.DualAntennaStatus;
+import com.nxp.nfc.vendor.dualAntenna.DualAntennaHandler.ReaderModeStatus;
+import com.nxp.nfc.vendor.lxdebug.ILxDebugCallbacks;
+import com.nxp.nfc.vendor.ntag.NTagHandler.NTagMode;
+import com.nxp.nfc.vendor.ntag.NTagHandler.NTagStatus;
+import com.nxp.nfc.vendor.srd.ISrdCallbacks;
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
@@ -35,17 +39,10 @@ import java.lang.annotation.RetentionPolicy;
  */
 public interface INxpNfcAdapter {
 
-
-  /**
-   * @brief gets the NxpNfc Extensions interface
-   *
-   * @return NxpNfc Extensions interface
-   */
-  INxpNfcExtentions getNxpNfcExtentionsInterface();
   /**
    * This is the first API to be called to start or stop the mPOS mode
    * <ul>
-   * <li>This api shall be called only Nfcservice is enabled.
+   * <li>This api shall be called only NfcService is enabled.
    * <li>This api shall be called only when there are no NFC transactions
    * ongoing
    * </ul>
@@ -61,7 +58,7 @@ public interface INxpNfcAdapter {
   /**
    * This is provides the info whether mPOS mode is activated or not
    * <ul>
-   * <li>This api shall be called only Nfcservice is enabled.
+   * <li>This api shall be called only NfcService is enabled.
    * <li>This api shall be called only when there are no NFC transactions
    * ongoing
    * </ul>
@@ -106,7 +103,7 @@ public interface INxpNfcAdapter {
 
   /**
    * This API get Autocard AID's  to NFCC using the vendor NCI message
-   * <li>This api shall be called only Nfcservice is enabled.
+   * <li>This api shall be called only NfcService is enabled.
    * @return status     :-0x00 :SUCCESS
    *                      0x01 - 0x06: NCI Status Codes
    *                           : Refer NCI spec v2.3 Table 140
@@ -115,8 +112,11 @@ public interface INxpNfcAdapter {
    *                      0x0C : Config not defined
    *                      0x0D : Feature not supported by platform
    *                      0x0E : EACSTATUS_ERROR_MESSAGE_CORRUPTED
-   * byte[0] indicates error, byte[1] cma ready count  and byte[2]
-   * onwards AID in TLV format.
+   * byte[0] indicates status, byte[1] onwards AID in TLV format.
+   * Number of Aid's     : 1 Byte
+   * Protocol type.      : 1 Byte
+   * Length of AID       : 1 Byte
+   * Aid Entry           : AID (x Bytes supported 5 <= x <= 16)
    * <p>Requires {@link   android.Manifest.permission#NFC} permission.
    */
   public byte[] getAutoCardAID() throws IOException;
@@ -124,10 +124,10 @@ public interface INxpNfcAdapter {
   /**
    * This API sends Autocard AID's  to NFCC using the vendor NCI message
    * <ul>
-   * <li>This api shall be called only Nfcservice is enabled.
+   * <li>This api shall be called only when NfcService is enabled and also
+   * <li>autocard feature should be enabled in NFCC.
    * </ul>
    * @param aids  No of AID's to configure.
-   * @param cmaReadyCount  CMA ready count.
    * @return status     :-0x00 :SUCCESS
    *                      0x01 - 0x06: NCI Status Codes
    *                           : Refer NCI spec v2.3 Table 140
@@ -138,13 +138,121 @@ public interface INxpNfcAdapter {
    *                      0x0E : EACSTATUS_ERROR_MESSAGE_CORRUPTED
    * <p>Requires {@link   android.Manifest.permission#NFC} permission.
    */
-  public @AutoCardStatus int setAutoCardAID(byte[] aids, int cmaReadyCount)
+  public @AutoCardStatus int setAutoCardAID(byte[] aids) throws IOException;
+
+  /**
+   * This API get Autocard AID RF parameters from NFCC using the vendor NCI cmd
+   * <li>This api shall be called only NfcService is enabled.
+   * @return status     :-0x00 :SUCCESS
+   *                      0x01 - 0x06: NCI Status Codes
+   *                           : Refer NCI spec v2.3 Table 140
+   *                      0x07 : NFC off
+   *                      0x0B : Disabled
+   *                      0x0C : Config not defined
+   *                      0x0D : Feature not supported by platform
+   *                      0x0E : EACSTATUS_ERROR_MESSAGE_CORRUPTED
+   * byte[0] array  : RF params <aid-0 index> <19 bytes data> ...
+   *                : <aid-n index> <19 bytes data>
+   * <p>Requires {@link   android.Manifest.permission#NFC} permission.
+   */
+  public byte[] getAutoCardRfParams() throws IOException;
+
+  /**
+   * This API sends Autocard AID RF parameters to NFCC using the vendor NCI cmd
+   * <ul>
+   * <li>This api shall be called only when NfcService is enabled and also
+   * <li>autocard feature should be enabled in NFCC.
+   * </ul>
+   * @param aids  No of AID's to configure.
+   * @return status     :-0x00 :SUCCESS
+   *                      0x01 - 0x06: NCI Status Codes
+   *                           : Refer NCI spec v2.3 Table 140
+   *                      0x07 : NFC off
+   *                      0x0B : Disabled
+   *                      0x0C : Config not defined
+   *                      0x0D : Feature not supported by platform
+   *                      0x0E : EACSTATUS_ERROR_MESSAGE_CORRUPTED
+   * <p>Requires {@link   android.Manifest.permission#NFC} permission.
+   */
+  public @AutoCardStatus int setAutoCardRfParams(byte[] aids)
       throws IOException;
+
+  /**
+   * This API to enable Autocard feature in NFCC using the vendor NCI message
+   * <ul>
+   * <li>This api shall be called only NfcService is enabled.
+   * @return status     :-0x00 :SUCCESS
+   *                      0x01 - 0x06: NCI Status Codes
+   *                           : Refer NCI spec v2.3 Table 140
+   *                      0x07 : NFC off
+   *                      0x0B : Disabled
+   *                      0x0C : Config not defined
+   *                      0x0D : Feature not supported by platform
+   *                      0x0E : EACSTATUS_ERROR_MESSAGE_CORRUPTED
+   * <p>Requires {@link   android.Manifest.permission#NFC} permission.
+   */
+  public @AutoCardStatus
+  int enableAutoCard(AutoCardStatusCallback mAutoCardStatusCallback)
+      throws IOException;
+
+  /**
+   * This API to disable Autocard feature in NFCC using the vendor NCI message.
+   * <ul>
+   * <li>This api shall be called only NfcService is enabled.
+   * @return status     :-0x00 :SUCCESS
+   *                      0x01 - 0x06: NCI Status Codes
+   *                           : Refer NCI spec v2.3 Table 140
+   *                      0x07 : NFC off
+   *                      0x0B : Disabled
+   *                      0x0C : Config not defined
+   *                      0x0D : Feature not supported by platform
+   *                      0x0E : EACSTATUS_ERROR_MESSAGE_CORRUPTED
+   * <p>Requires {@link   android.Manifest.permission#NFC} permission.
+   */
+  public @AutoCardStatus int disableAutoCard() throws IOException;
+
+  /**
+   * This API sets Autocard AID's status to NFCC using the vendor NCI message
+   * <ul>
+   * <li>This api shall be called only when NfcService is enabled and also
+   * <li>autocard feature should be enabled in NFCC.
+   * </ul>
+   * @param appletStatus  Update status of configured AID's.
+   * @return status     :-0x00 :SUCCESS
+   *                      0x01 - 0x06: NCI Status Codes
+   *                           : Refer NCI spec v2.3 Table 140
+   *                      0x07 : NFC off
+   *                      0x0B : Disabled
+   *                      0x0C : Config not defined
+   *                      0x0D : Feature not supported by platform
+   *                      0x0E : EACSTATUS_ERROR_MESSAGE_CORRUPTED
+   * <p>Requires {@link   android.Manifest.permission#NFC} permission.
+   */
+  public @AutoCardStatus int setAutoCardAppletStatus(byte[] appletStatus)
+      throws IOException;
+
+  /**
+   * This API sends suspend/resume cmd to NFCC using the vendor NCI message
+   * <ul>
+   * <li>This api shall be called only when NfcService is enabled and also
+   * <li>autocard feature should be enabled in NFCC.
+   * </ul>
+   * @param flag  true/false.
+   * @return status     :-0x00 :SUCCESS
+   *                      0x01 - 0x06: NCI Status Codes
+   *                           : Refer NCI spec v2.3 Table 140
+   *                      0x07 : NFC off
+   *                      0x0B : Disabled
+   *                      0x0C : Config not defined
+   *                      0x0D : Feature not supported by platform
+   * <p>Requires {@link   android.Manifest.permission#NFC} permission.
+   */
+  public @AutoCardStatus int suspendAutoCard(boolean flag) throws IOException;
 
   /**
    * This is the API to be called to enable or disable QTag RF mode.
    * <ul>
-   * <li>This api shall be called only when Nfcservice is enabled.
+   * <li>This api shall be called only when NfcService is enabled.
    * <li>This api shall be called only when there are no NFC transactions
    * ongoing.
    * <li>Limit the NFC controller to reader mode while this Activity is in the
@@ -172,7 +280,7 @@ public interface INxpNfcAdapter {
      * are already part of libnfc-nci.conf <p>Requires
      * {@link android.Manifest.permission#NFC} permission.
      * <ul>
-     * <li>This api shall be called only Nfcservice is enabled.
+     * <li>This api shall be called only NfcService is enabled.
      * <li>This api shall be called only when there are no NFC transactions ongoing
      * </ul>
      * @param  configs NFC Configuration to be updated.
@@ -191,7 +299,7 @@ public interface INxpNfcAdapter {
   /**
    * This api is called to get current FW version.
    * @return byte array of fwVersion
-   *         fwVersion byte array of length 3 - Suceess
+   *         fwVersion byte array of length 3 - Success
    *            byte[0] - Major version
    *            byte[1] - Minor version
    *            byte[2] - Rom version
@@ -245,9 +353,20 @@ public interface INxpNfcAdapter {
   int startCardEmulation();
 
   /**
+   * This API starts card emulation mode. Starts RF Discovery with Default
+   * POLL configurations and sets the Listen tech parameters.
+   * @param listenTech Flags indicating listen technologies.
+   * @return status     :-0x00 :EFDSTATUS_SUCCESS
+   *                      0x01 :EFDSTATUS_FAILED
+   *                      0x05 :EFDSTATUS_ERROR_NFC_IS_OFF
+   *                      0x06 :EFDSTATUS_ERROR_UNKNOWN
+   */
+  int startCardEmulation(int listenTech);
+
+  /**
    * This api is called by applications enable or disable field
-   * detect feauture.
-   * This api shall be called only Nfcservice is enabled.
+   * detect feature.
+   * This api shall be called only NfcService is enabled.
    * @param  mode to Enable(true) and Disable(false)
    * @return whether  the update of configuration is
    *          success or not with reason.
@@ -274,7 +393,7 @@ public interface INxpNfcAdapter {
    * Once RSSI is enabled, RSSI data notifications are broadcasted to registered
    * application when the device is in the reader field. Application can then
    * analyze this data and find best position for transaction.
-   * This api shall be called only after Nfcservice is enabled.
+   * This api shall be called only after NfcService is enabled.
    * @param  rssiNtfTimeIntervalInMillisec to set time interval between RSSI
    * notification in milliseconds. It is recommended that this value is
    * greater than 10 millisecs and multiple of 10.
@@ -290,7 +409,7 @@ public interface INxpNfcAdapter {
 
   /**
    * This api is called by applications to stop RSSI mode
-   * This api shall be called only after Nfcservice is enabled.
+   * This api shall be called only after NfcService is enabled.
    * @return whether  the update of configuration is
    *          success or not with reason.
    *          0x01  - NFC_IS_OFF,
@@ -312,9 +431,10 @@ public interface INxpNfcAdapter {
   boolean isRssiEnabled() throws IOException;
 
   /**
-   * This api is called by application to enable various debug notigications
+   * @deprecated This api is called by application to enable various debug notigications
    * of NFCC.
-   * This api shall be called only if Nfcservice is enabled.
+   * This api shall be called only if NfcService is enabled.
+   *
    * @return whether  the update of configuration is
    *          success or not.
    *          0x00 - success
@@ -322,16 +442,35 @@ public interface INxpNfcAdapter {
    *          0x03 - NFCC command failed
    *          0xFF - Service Unavialable
    */
+  @Deprecated
   int enableDebugNtf(byte fieldValue);
   /**
-   * This API registers the callback to get SRD Timout Events.
+   * This api is called by application to enable various debug notigications
+   * of NFCC.
+   * This api shall be called only if NfcService is enabled.
+   * @param fieldValue : bytes to be set for lxdebug config.
+   * @return whether  the update of configuration is
+   *          success or not.
+   *          0x00 - success
+   *          0x01 - NFC is not initialized
+   *          0x03 - NFCC command failed
+   *          0x04 - Invalid argument In case of fieldValue
+   *                 is not 2 bytes.
+   *          0xFF - Service Unavialable
+   */
+  int enableDebugNtf(byte[] fieldValue);
+  /**
+   * This API registers the callback to get SRD Timeout Events.
+   * @param callbacks : callback object to be register.
+  /**
+   * This API registers the callback to get SRD Timeout Events.
    * @param callbacks : callback object to be register.
    */
   void registerSrdCallbacks(ISrdCallbacks callbacks);
 
   /**
    * This API unregisters the Application callbacks to be called
-   * for SRD Timout notifications.
+   * for SRD Timeout notifications.
    */
   void unregisterSrdCallbacks();
   public static final int SRD_STATUS_SUCCESS = 0;
@@ -349,4 +488,107 @@ public interface INxpNfcAdapter {
     @Retention(RetentionPolicy.SOURCE)
     public @interface SRDStatus{}
 
+    public @interface DualAntennaStatus {}
+
+    /**
+     * This is the API to be called to check Dual Antenna feature is supported
+     * or not. <li>This api shall be called only when Nfcservice is enabled.
+     * <li>This api shall be called only when there are no NFC transactions
+     * ongoing.
+     * </ul>
+     * @throws IOException If a failure occurred
+     */
+    public boolean isDualAnetannaSupported() throws IOException;
+    /**
+     * This is the API to be called to configure the antenna's.
+     * <li>This api shall be called only when Nfcservice is enabled.
+     * <li>This api shall be called only when there are no NFC transactions
+     * ongoing.
+     * </ul>
+     * @param  tech1 , To configure antenna 1 with given polling configuration
+     * @param  tech2 , To configure antenna 2 with given polling configuration
+     * @return whether the update of state is
+     *          ENABLE_DISABLE_STATUS_SUCCESS,
+     *          ENABLE_DISABLE_STATUS_FAILED,
+     * @throws IOException If a failure occurred during enable/disable the
+     *     feature
+     */
+    public @DualAntennaStatus int setDiscoveryTechnology_DualAntenna(int tech1,
+                                                                     int tech2)
+        throws IOException;
+
+    /**
+     * This is the API to be called to enable reader mode on either antenna's.
+     * <li>This api shall be called only when Nfcservice is enabled.
+     * <li>This api shall be called only when there are no NFC transactions
+     * ongoing.
+     * </ul>
+     * @param  ant1 , To configure readerMode in antenna1
+     * @param  ant2 , To configure readerMode in antenna2
+     * @return whether the update of state is
+     *          ENABLE_DISABLE_STATUS_SUCCESS,
+     *          ENABLE_DISABLE_STATUS_FAILED,
+     * @throws IOException If a failure occurred during enable reader mode
+     */
+    public @DualAntennaStatus int
+    setPollingMode_DualAntenna(@ReaderModeStatus int ant1,
+                               @ReaderModeStatus int ant2) throws IOException;
+
+    /**
+     * This is the API to be called to get the discovery technology on both
+     * antennas <li>This api shall be called only when Nfcservice is enabled.
+     * <li>This api shall be called only when there are no NFC transactions
+     * ongoing.
+     * </ul>
+     * @throws IOException If a failure occurred
+     */
+    public @DualAntennaStatus int[] getDiscoveryTechnology_DualAntenna()
+        throws IOException;
+
+    /**
+     * This is the API to be called to get the Polling Mode on both antennas
+     * <li>This api shall be called only when Nfcservice is enabled. <li>This
+     * api shall be called only when there are no NFC transactions ongoing.
+     * </ul>
+     * @throws IOException If a failure occurred
+     */
+    public @DualAntennaStatus int getPollingMode_DualAntenna()
+        throws IOException;
+
+    /**
+     * This is provides the info whether NTag mode is enabled or not
+     * <li>This api shall return false if Nfcservice is disabled.
+     * </ul>
+     * @return TRUE if NTag mode is enabled
+     *         FALSE if NTag mode is disabled
+     * @throws IOException If a failure occurred during NTag RF mode set or
+     *     reset
+     */
+    public boolean isNTagEnabled() throws IOException;
+
+    /**
+     * This is the API to be called to enable or disable NTag RF mode.
+     * <li>This api shall be called only when Nfcservice is enabled.
+     * <li>This api shall be called only when there are no NFC transactions
+     * ongoing.
+     * <li> Tag DISCOVERED intent will be sent to application once read
+     * complete.
+     * </ul>
+     * @param  activity activity the Activity that requests the adapter to be in
+     *     reader mode.
+     * @param mNTagStatusCallback the callback to be called when NTAG is
+     *     added/removed
+     *      UID value and detected status will be to updated when tag is added.
+     *      Removed status will be update on tag removal.
+     * @param  mode to ENABLE_NTAG.
+     *                 DISABLE_NTAG & reset to default discovery.
+     * @return whether the update of state is
+     *          0x00 - STATUS_SUCCESS,
+     *          0x01 - STATUS_FAILED,
+     * @throws IOException If a failure occurred during NTag RF mode set or
+     *     reset
+     */
+    public @NTagStatus int
+    setNTagMode(Activity activity, NxpNTagStatusCallback mNTagStatusCallback,
+                @NTagMode int mode) throws IOException;
 }

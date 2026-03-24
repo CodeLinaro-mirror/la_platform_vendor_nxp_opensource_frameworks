@@ -22,7 +22,7 @@ package com.nxp.nfc.vendor.lxdebug;
 
 /**
  * @interface ILxDebugDataCallbacks
- * @brief Interface to perform LxDebug releated callbacks to apps.
+ * @brief Interface to perform LxDebug related callbacks to apps.
  *
  */
 public interface ILxDebugCallbacks {
@@ -33,7 +33,26 @@ public interface ILxDebugCallbacks {
 
     /**
      * This callback triggers on receiving the LX Debug data.
-     * @param lxDebugData : LX Dbug data received from NFCC
+     * @param lxDebugData : LX Debug data received from NFCC
      */
     void onLxDebugDataReceived(byte[] lxDebugData);
+
+    /**
+     * This callback triggers on receiving the RF filed On/Off Event.
+     * @param isActive : true when rf activated
+     *                             false when deactivated
+     */
+    void onRfFieldDetected(boolean isActive);
+
+    /**
+     * Callback to indicate if NFC boots successfully or not.
+     * @param status the status code indicating if boot finished successfully
+     */
+    void onNfcBootFinished(int status);
+
+    /**
+     * Callback to indicate if NFC is successfully enabled.
+     * @param status the status code indicating if enable finished successfully
+     */
+    void onNfcEnableFinished(int status);
 }
