@@ -24,22 +24,25 @@ import android.app.Activity;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.os.Bundle;
+
+import com.nxp.nfc.core.NfcOperations;
+import com.nxp.nfc.core.NxpNciPacketHandler;
 import com.nxp.nfc.INxpNfcNtfHandler;
-import com.nxp.nfc.NxpNfcAdapter;
 import com.nxp.nfc.NxpNfcAdapter.NxpReaderCallback;
 import com.nxp.nfc.NxpNfcConstants;
 import com.nxp.nfc.NxpNfcLogger;
-import com.nxp.nfc.NxpNfcUtils;
-import java.util.concurrent.Executors;
-import com.nxp.nfc.core.NfcOperations;
-import com.nxp.nfc.core.NxpNciPacketHandler;
+
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class QTagHandler implements INxpNfcNtfHandler {
 
   private final NxpNciPacketHandler mNxpNciPacketHandler;
   private NfcAdapter mNfcAdapter;
   private final NfcOperations mNfcOperations;
+  private static final ExecutorService QTAG_CALLBACK_EXECUTOR =
+                        Executors.newSingleThreadExecutor();
 
   public enum QTagStatus {
     Success(0x00),
@@ -142,8 +145,6 @@ public class QTagHandler implements INxpNfcNtfHandler {
 
     synchronized (qtagSync) { sQTagDetected = false; }
 
-    mNxpNciPacketHandler.registerCallback(Executors.newSingleThreadExecutor(),
-                                          this);
     try {
       NxpNfcLogger.d(TAG, "Sending VendorNciMessage");
       byte[] vendorRsp = mNxpNciPacketHandler.sendVendorNciMessage(
@@ -152,10 +153,14 @@ public class QTagHandler implements INxpNfcNtfHandler {
       if (vendorRsp != null && vendorRsp.length > 0 &&
           vendorRsp[1] == NfcAdapter.SEND_VENDOR_NCI_STATUS_SUCCESS) {
         status = QTagStatus.Success.value;
-        if (qMode == QTagSubOid.Disable.value)
+        if (qMode == QTagSubOid.Disable.value) {
           sIsQPollEnabled = false;
-        else
+          mNxpNciPacketHandler.unregisterNtfCallback(this);
+        }
+        else {
           sIsQPollEnabled = true;
+          mNxpNciPacketHandler.registerNtfCallback(QTAG_CALLBACK_EXECUTOR, this);
+        }
       } else {
         NxpNfcLogger.e(TAG, "enableQtag failed!!");
         status = QTagStatus.Failed.value;
