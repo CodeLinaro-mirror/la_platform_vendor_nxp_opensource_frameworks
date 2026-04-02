@@ -126,6 +126,8 @@ struct NtagControl {
   bool mLpcdWoutPoll;
   /*flag to indicate RF_DEACTIVATE_NTF sent*/
   bool isRfNtfSent;
+  /*flag to indicate LPCD_WO_POLL_CMD is sent*/
+  bool isLpcdCmdSent;
 };
 
 class NxpNTag {
@@ -143,8 +145,7 @@ public:
    */
   static inline void finalize() {
     if (sNxpNTag != nullptr) {
-      delete (sNxpNTag);
-      sNxpNTag = nullptr;
+      sNxpNTag.reset();
     }
   }
 
@@ -174,7 +175,8 @@ public:
   static void phNxpNciHal_disableNtagNtfConfig();
 
 private:
-  static NxpNTag *sNxpNTag;
+  static std::unique_ptr<NxpNTag>
+      sNxpNTag; /* Singleton instance of Ntag */
   NtagControl mNtagControl;
   NTagState mNTagState;
   NTagSetSubState mNTagSetSubState;
@@ -396,4 +398,5 @@ private:
   void clearNTagFlags();
   NxpNTag();
   ~NxpNTag();
+  friend struct std::default_delete<NxpNTag>;
 };

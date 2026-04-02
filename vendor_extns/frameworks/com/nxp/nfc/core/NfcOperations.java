@@ -272,6 +272,8 @@ public class NfcOperations {
             }
         } catch (InterruptedException e) {
             NxpNfcLogger.e(TAG, "Error while changing discovery " +isStart);
+        } catch (IllegalArgumentException e) {
+            NxpNfcLogger.e(TAG, "Oem Callback already unregistered");
         }
     }
 
@@ -616,6 +618,10 @@ public class NfcOperations {
         @Override
         protected Void doInBackground(Integer... params) {
             NxpNfcLogger.d(TAG, "doInBackground");
+            if (params == null || params.length == 0) {
+                NxpNfcLogger.e(TAG, "doInBackground: params is null or empty");
+                return null;
+            }
             if (mNxpOemCallbacks != null) {
                 mNxpOemCallbacks.onEnableFinished(params[0]);
             }
@@ -628,6 +634,10 @@ public class NfcOperations {
         @Override
         protected Void doInBackground(Integer... params) {
             NxpNfcLogger.d(TAG, "doInBackground");
+            if (params == null || params.length == 0) {
+                NxpNfcLogger.e(TAG, "doInBackground: params is null or empty");
+                return null;
+            }
             if (mNxpOemCallbacks != null) {
                 mNxpOemCallbacks.onBootFinished(params[0]);
             }

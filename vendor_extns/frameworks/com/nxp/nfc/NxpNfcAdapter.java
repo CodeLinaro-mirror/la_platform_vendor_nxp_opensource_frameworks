@@ -44,6 +44,8 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import android.os.Bundle;
+
 /**
  * @class NxpNfcAdapter
  * @brief Concrete implementation of NFC Extension features
@@ -90,7 +92,7 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     private static final int NXP_EN_SN330U = 1;
 
     private static final int NFC_NXP_MW_ANDROID_VER = 17; // Android version used by NFC MW
-    private static final int NFC_NXP_MW_VERSION_MAJ = 0x04; // MW Major Version
+    private static final int NFC_NXP_MW_VERSION_MAJ = 0x05; // MW Major Version
     private static final int NFC_NXP_MW_VERSION_MIN = 0x00; // MW Minor Version
     private static final int NFC_NXP_MW_CUSTOMER_ID = 0x00; // MW Customer ID
     private static final int NFC_NXP_MW_RC_VERSION = 0x00; // MW RC Version
@@ -333,9 +335,11 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
     }
 
     /**
+     * @deprecated Please use enableQTag API with Bundle argument
      * @brief To be called to enable QTag
      * @return {@link INxpNfcAdapter.enableQTag} instance
      */
+    @Deprecated
     @Override
     public int enableQTag(Activity activity, NxpReaderCallback mQTagCallback,
                           int mode, int pollTech, int delay_value)
@@ -343,6 +347,18 @@ public final class NxpNfcAdapter implements INxpNfcAdapter {
       return mQTagHandler.enableQTag(activity, mode, mQTagCallback, pollTech,
                                      delay_value);
     }
+
+    /**
+     * @brief To be called to enable QTag
+     * @return {@link INxpNfcAdapter.enableQTag} instance
+     */
+    @Override
+    public int enableQTag(Activity activity, NxpReaderCallback mQTagCallback,
+                          int mode, int pollTech, Bundle options)
+        throws IOException {
+      return mQTagHandler.enableQTag(activity, mode, mQTagCallback, pollTech,
+                                     options);
+	}
 
     /**
      * @brief To be called to set NCI configuration

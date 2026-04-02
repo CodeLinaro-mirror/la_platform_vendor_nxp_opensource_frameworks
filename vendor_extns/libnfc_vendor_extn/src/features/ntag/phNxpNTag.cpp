@@ -17,10 +17,11 @@
  ******************************************************************************/
 #include "phNxpNTag.h"
 
-NxpNTag *NxpNTag::sNxpNTag = nullptr;
+std::unique_ptr<NxpNTag> NxpNTag::sNxpNTag = nullptr;
 
 NxpNTag::NxpNTag() {
   NXPLOG_EXTNS_D(NXPLOG_ITEM_NXP_GEN_EXTN, "NxpNTag::%s Enter ", __func__);
+  mNtagControl.ntagTimerId = 0;
   clearNTagFlags();
 }
 
@@ -36,11 +37,14 @@ void NxpNTag::clearNTagFlags() {
   mNtagControl.isNTagNtfEnabled = false;
   mNtagControl.isScreenOff = false;
   mNtagControl.isCeStarted = false;
-  mNtagControl.mNTagTimer.kill(&mNtagControl.ntagTimerId);
-  mNtagControl.ntagTimerId = 0;
+  if (mNtagControl.ntagTimerId != 0) {
+    mNtagControl.mNTagTimer.kill(&mNtagControl.ntagTimerId);
+    mNtagControl.ntagTimerId = 0;
+  }
   mWaitingforDiscRsp = false;
   mNtagControl.mLpcdWoutPoll = false;
   mNtagControl.isRfNtfSent = false;
+  mNtagControl.isLpcdCmdSent = false;
   mNTagState = NTagState::NTAG_STATE_IDLE;
   mNTagSetSubState = NTagSetSubState::NTAG_SET_SUB_STATE_IDLE;
 }
@@ -51,10 +55,10 @@ NxpNTag::~NxpNTag() {
 }
 
 NxpNTag *NxpNTag::getInstance() {
-  if (sNxpNTag == nullptr) {
-    sNxpNTag = new NxpNTag();
+  if (!sNxpNTag) {
+    sNxpNTag = std::unique_ptr<NxpNTag>(new NxpNTag());
   }
-  return sNxpNTag;
+  return sNxpNTag.get();
 }
 
 bool NxpNTag::isNtagSupported() {
@@ -340,7 +344,7 @@ void NxpNTag::updateState(NTagState state) {
 NFCSTATUS NxpNTag::sendLpcdWoPoll(bool flag) {
   NFCSTATUS status = NFCSTATUS_FAILED;
   uint32_t mFwVer = 0;
-
+  mNtagControl.isLpcdCmdSent = true;
   std::vector<uint8_t> mFwRsp = NciStateMonitor::getInstance()->getFwVersion();
   if (mFwRsp.size() > 2)
     mFwVer = (((uint32_t)mFwRsp[0]) << 16U) | (((uint32_t)mFwRsp[1]) << 8U) |
@@ -713,10 +717,12 @@ NFCSTATUS NxpNTag::handleVendorNciRspNtf(uint16_t dataLen, uint8_t *pData) {
     return NFCSTATUS_EXTN_FEATURE_FAILURE;
 
   // LPCD_WO_POLL_CMD response to be consumed in HAL
-  if (dataLen == 5 && (pData[NCI_GID_INDEX] == (NCI_MT_RSP | NCI_GID_PROP)) &&
+  if (mNtagControl.mNtagEnableRequest && mNtagControl.isLpcdCmdSent && dataLen == 5 &&
+      (pData[NCI_GID_INDEX] == (NCI_MT_RSP | NCI_GID_PROP)) &&
       (pData[NCI_OID_INDEX] == NTAG_LPCD_PROP_VAL) &&
       (pData[NCI_MSG_LEN_INDEX] == PAYLOAD_TWO_LEN) &&
       (pData[3] == NCI_PROP_LPCD_WOUT_POLL_SET_CMD)) {
+        mNtagControl.isLpcdCmdSent = false;
     return NFCSTATUS_EXTN_FEATURE_SUCCESS;
   }
 
