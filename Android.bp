@@ -15,16 +15,17 @@
 
 
 prebuilt_etc {
-    name: "com.nxp.nqnfc.xml",
+    name: "com.nxp.nfc.nq.xml",
     sub_dir: "permissions",
-    src: "com.nxp.nfc.xml",
+    src: "com.nxp.nfc.nq.xml",
 }
 
 java_library {
-    name: "com.nxp.nqnfc",
+    name: "com.nxp.nfc.nq",
     installable: true,
-    enabled: false,
-    required: ["com.nxp.nqnfc.xml"],
+    enabled: true,
+    required: ["com.nxp.nfc.nq.xml"],
+
     srcs: [
         "com/**/I*.aidl",
         "com/**/*.java",
