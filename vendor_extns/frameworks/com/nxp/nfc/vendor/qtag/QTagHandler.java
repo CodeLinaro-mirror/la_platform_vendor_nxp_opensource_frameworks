@@ -2,7 +2,7 @@
  *
  *  The original Work has been changed by NXP.
  *
- *  Copyright 2024-2025 NXP
+ *  Copyright 2024-2026 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -117,6 +117,17 @@ public class QTagHandler implements INxpNfcNtfHandler {
                             pollTech + " delay_value:" + delay_value);
     final Bundle options = new Bundle();
     options.putInt(NfcAdapter.EXTRA_READER_PRESENCE_CHECK_DELAY, delay_value);
+
+    return enableQTag(activity, qMode, mQTagCallback, pollTech, options);
+
+  }
+
+  public int enableQTag(Activity activity, int qMode,
+                        NxpReaderCallback mQTagCallback, int pollTech,
+                        Bundle options) throws IOException {
+    NxpNfcLogger.d(TAG, "enableQTag Enter mode: " + qMode + " pollTech:" +
+                            pollTech + " Bundle:" + options);
+
     int status = QTagStatus.Failed.value;
 
     if (mNfcAdapter.getAdapterState() == NfcAdapter.STATE_OFF) {

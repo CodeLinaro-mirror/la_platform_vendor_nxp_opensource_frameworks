@@ -44,7 +44,7 @@
 #define NXP_EN_SN330U 1
 #define NXP_NDEF_TAG_EMULATION_LOGICAL_CHANNEL 5
 #define NFC_NXP_MW_ANDROID_VER (17U)  /* Android version used by NFC MW */
-#define NFC_NXP_MW_VERSION_MAJ (0x04) /* MW Major Version */
+#define NFC_NXP_MW_VERSION_MAJ (0x05) /* MW Major Version */
 #define NFC_NXP_MW_VERSION_MIN (0x00) /* MW Minor Version */
 #define NFC_NXP_MW_CUSTOMER_ID (0x00) /* MW Customer Id */
 #define NFC_NXP_MW_RC_VERSION (0x00)  /* MW RC Version */
@@ -274,10 +274,6 @@ NFCSTATUS phNxpNciHal_reset_ext_buffer() {
 NFCSTATUS phNxpNciHal_process_ext_rsp(uint8_t* p_ntf, uint16_t* p_len) {
   NFCSTATUS status = NFCSTATUS_SUCCESS;
 
-  if (phNxpNciHal_ext_check_unrecoverable_errors(p_ntf, p_len) !=
-      NFCSTATUS_SUCCESS) {
-    return NFCSTATUS_SUCCESS;
-  }
   if (phNxpNciHal_ext_check_rf_queue_full_error(p_ntf, p_len) !=
       NFCSTATUS_SUCCESS) {
     return NFCSTATUS_SUCCESS;
@@ -606,7 +602,7 @@ static NFCSTATUS phNxpNciHal_ext_process_nfc_init_rsp(uint8_t* p_ntf,
       }
       NXPLOG_NCIHAL_D("CORE_RESET_NTF NCI2.0 reason CORE_RESET_CMD received !");
       nxpncihal_ctrl.nci_info.nci_version = p_ntf[5];
-      if (!nxpncihal_ctrl.halStatus)
+      if (nxpncihal_ctrl.halStatus == HAL_STATUS_CLOSE)
         phNxpNciHal_configFeatureList(p_ntf, *p_len);
       const int len = p_ntf[2] + 2; /*include 2 byte header*/
       if (len != *p_len - 1) {
@@ -630,7 +626,8 @@ static NFCSTATUS phNxpNciHal_ext_process_nfc_init_rsp(uint8_t* p_ntf,
       phNxpNciHal_setVendorProp("nfc.fw.ver", result);
     } else {
       if ((p_ntf[3] == CORE_RESET_TRIGGER_TYPE_WATCHDOG_RESET ||
-           p_ntf[3] == CORE_RESET_TRIGGER_TYPE_FW_ASSERT) ||
+           p_ntf[3] == CORE_RESET_TRIGGER_TYPE_FW_ASSERT ||
+           p_ntf[3] == CORE_RESET_TRIGGER_TYPE_POWERED_ON) ||
           ((p_ntf[3] == CORE_RESET_TRIGGER_TYPE_UNRECOVERABLE_ERROR) &&
            (p_ntf[4] == CORE_RESET_TRIGGER_TYPE_WATCHDOG_RESET ||
             p_ntf[4] == CORE_RESET_TRIGGER_TYPE_FW_ASSERT))) {
@@ -1803,24 +1800,21 @@ static bool phNxpNciHal_update_core_reset_ntf_prop() {
 ** Description      Check for unrecoverable error/fatal commands and trigger
 **                  NFCEE unrecoverable error notification to upper layer.
 **
-** Returns          NFCSTATUS_FAILED if fatal error found
-**                  NFCSTATUS_SUCCESS otherwise
+** Returns          None
 **
 *******************************************************************************/
-static NFCSTATUS phNxpNciHal_ext_check_unrecoverable_errors(uint8_t* p_ntf,
-                                                            uint16_t* p_len) {
+void phNxpNciHal_ext_check_unrecoverable_errors(uint8_t* p_ntf,
+                                                uint16_t p_len) {
   uint8_t reason_code = 0;
-  if (*p_len == 5 && p_ntf[0] == 0x62 && p_ntf[1] == 0x02 && p_ntf[2] == 0x02 &&
+  if (p_len == 5 && p_ntf[0] == 0x62 && p_ntf[1] == 0x02 && p_ntf[2] == 0x02 &&
       (p_ntf[3] == NCI_ROUTE_ESE_ID || p_ntf[3] == NCI_ROUTE_EUICC1_ID ||
        p_ntf[3] == NCI_ROUTE_EUICC2_ID) &&
       (p_ntf[4] == NCI_NFCEE_STS_PMUVCC_OFF ||
        (p_ntf[4] & 0xF0) == NCI_NFCEE_STS_PROP_UNRECOVERABLE_ERROR)) {
     NXPLOG_NCIHAL_E("NFCEE_STATUS_NTF: eSE Mailbox Reset");
     p_ntf[4] = NCI_NFCEE_STS_UNRECOVERABLE_ERROR;
-    // Return FAILED to indicate the original packet should be dropped
-    return NFCSTATUS_FAILED;
   }
-  return NFCSTATUS_SUCCESS;
+  return;
 }
 
 /*******************************************************************************

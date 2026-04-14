@@ -109,6 +109,8 @@ extern NFCSTATUS phNxpNciHal_enableDefaultUICC2SWPline(uint8_t uicc2_sel);
 extern void phNxpNciHal_conf_nfc_forum_mode();
 extern void phNxpNciHal_prop_conf_lpcd(bool enableLPCD);
 extern void phNxpNciHal_prop_conf_rssi();
+extern void phNxpNciHal_ext_check_unrecoverable_errors(uint8_t* p_ntf,
+                                                       uint16_t p_len);
 
 nfc_stack_callback_t* p_nfc_stack_cback_backup;
 phNxpNci_getCfg_info_t* mGetCfg_info = NULL;
@@ -1166,6 +1168,8 @@ static void phNxpNciHal_read_complete(void* pContext,
       // Send the response to upper layer, if it is not handled by Nfc
       // extension library
       if (NFCSTATUS_EXTN_FEATURE_SUCCESS != extStatus) {
+        phNxpNciHal_ext_check_unrecoverable_errors(pInfo->pBuff,
+                                                   pInfo->wLength);
         phNxpNciHal_client_data_callback(pInfo->wLength, pInfo->pBuff);
       }
     }
@@ -2112,6 +2116,7 @@ int phNxpNciHal_close(bool bShutdown) {
   uint8_t cmd_ce_in_phone_off_pn557[] = {0x20, 0x02, 0x05, 0x01,
                                          0xA0, 0x07, 0x01, 0x02};
   uint8_t cmd_system_set_service_status[] = {0x2F, 0x01, 0x01, 0x00};
+  uint8_t cmd_ese_nfcee_power_on[] = {0x22, 0x03, 0x02, 0xC0, 0x01};
   uint8_t length = 0;
   uint8_t numPrms = 0;
   uint8_t ptr = 4;
@@ -2156,6 +2161,13 @@ int phNxpNciHal_close(bool bShutdown) {
   if (sem_val == 0) {
     sem_post(&(nxpncihal_ctrl.syncSpiNfc));
   }
+  if ((IS_CHIP_TYPE_GE(sn100u)) && (IS_CHIP_TYPE_NE(pn560))) {
+    status = phNxpNciHal_send_ext_cmd(sizeof(cmd_ese_nfcee_power_on),
+                                      cmd_ese_nfcee_power_on, &rsp_len, rsp);
+    if (status != NFCSTATUS_SUCCESS) {
+      NXPLOG_NCIHAL_E("CMD_ESE_NFCEEE_POWER_ON: Failed");
+    }
+  }
   /**
    * @brief In case of chipset greater than or equal to SN110,
    * If Chipset is SN300 &
@@ -2175,6 +2187,7 @@ int phNxpNciHal_close(bool bShutdown) {
          (GetNxpNumValue(NAME_NXP_CE_SUPPORT_IN_NFC_OFF_PHONE_OFF, &num,
                          sizeof(num))) &&
          ((num == NXP_PHONE_OFF_NFC_OFF_CE_NOT_SUPPORTED) ||
+          (num == NXP_PHONE_OFF_NFC_OFF_CE_SUPPORTED) ||
           (num == NXP_PHONE_OFF_NFC_OFF_T4T_CE_SUPPORTED)))) {
       if (num == NXP_PHONE_OFF_NFC_OFF_CE_NOT_SUPPORTED) {
         status = phNxpNciHal_send_ext_cmd(sizeof(cmd_ce_in_phone_off),
