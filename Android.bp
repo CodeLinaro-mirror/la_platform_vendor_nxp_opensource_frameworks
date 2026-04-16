@@ -13,19 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-soong_namespace {}
 
 prebuilt_etc {
-    name: "com.nxp.nfc.xml",
+    name: "com.nxp.nqnfc.xml",
     sub_dir: "permissions",
     src: "com.nxp.nfc.xml",
 }
 
 java_library {
-    name: "com.nxp.nfc",
+    name: "com.nxp.nqnfc",
     installable: true,
     enabled: false,
-    required: ["com.nxp.nfc.xml"],
+    required: ["com.nxp.nqnfc.xml"],
     srcs: [
         "com/**/I*.aidl",
         "com/**/*.java",
