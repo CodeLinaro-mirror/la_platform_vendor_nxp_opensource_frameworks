@@ -253,7 +253,7 @@ NFCSTATUS phOsalNfc_Timer_Delete(uint32_t dwTimerId) {
   pTimerHandle = &apTimerInfo[dwIndex];
   /* OSAL Module and Timer needs to be initialized for timer usage */
 
-  /* Check whether the TimerId passed by user is valid and Deregistering of
+  /* Check whether the TimerId passed by user is valid and De-registering of
    * timer is successful */
   if ((0x00 != pTimerHandle->TimerId) &&
       (NFCSTATUS_SUCCESS == phOsalNfc_CheckTimerPresence(pTimerHandle))) {
@@ -291,7 +291,7 @@ void phOsalNfc_Timer_Cleanup(void) {
     pTimerHandle = &apTimerInfo[dwIndex];
     /* OSAL Module and Timer needs to be initialized for timer usage */
 
-    /* Check whether the TimerId passed by user is valid and Deregistering of
+    /* Check whether the TimerId passed by user is valid and De-registering of
      * timer is successful */
     if ((0x00 != pTimerHandle->TimerId) &&
         (NFCSTATUS_SUCCESS == phOsalNfc_CheckTimerPresence(pTimerHandle))) {

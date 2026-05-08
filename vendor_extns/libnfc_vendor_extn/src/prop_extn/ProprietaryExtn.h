@@ -1,6 +1,6 @@
 /**
  *
- *  Copyright 2024-2025 NXP
+ *  Copyright 2024-2026 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -19,9 +19,11 @@
 #ifndef PROP_EXTENSION_H
 #define PROP_EXTENSION_H
 
-#include <cstdint>
-#include <string>
 #include <phNfcStatus.h>
+
+#include <cstdint>
+#include <memory>
+#include <string>
 class ProprietaryExtn {
 public:
   ProprietaryExtn(const ProprietaryExtn &) = delete;

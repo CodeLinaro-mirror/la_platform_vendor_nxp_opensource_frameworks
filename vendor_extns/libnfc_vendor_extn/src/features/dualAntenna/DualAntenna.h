@@ -29,7 +29,7 @@
 #include <vector>
 
 struct DualAntennaContext {
-  /*DualAntenna freature presence in the device*/
+  /*DualAntenna feature presence in the device*/
   bool mDualAntennaFeature;
   /*DualAntenna feature request*/
   bool mDualAntennaRequest;
@@ -156,6 +156,19 @@ public:
    * feature and handled it internaly otherwise NFCSTATUS_EXTN_FEATURE_FAILURE.
    */
   NFCSTATUS sendConDiscParamCmd();
+
+  /**
+   * @brief Determines whether the received NCI message is a
+   *        valid dual antenna Notification.
+   *
+   * @param[in] dataLen Length of the received NCI data buffer.
+   * @param[in] pData   Pointer to the received NCI data buffer.
+   *
+   * @return true  If the message is identified as a valid
+   *               NCI Generic Information Notification.
+   * @return false Otherwise.
+   */
+  bool isValidDualAntennaNtf(uint16_t dataLen, uint8_t* pData);
 
   constexpr static uint8_t DUAL_ANTENNA_SUB_GID_OID = 0x40;
 

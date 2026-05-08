@@ -878,7 +878,7 @@ NFCSTATUS phDnldNfc_LoadRecInfo(void) {
   uint8_t* pImageInfo = NULL;
   uint32_t ImageInfoLen = 0;
 
-  /* if memory is not allocated then allocate memory for donwload context
+  /* if memory is not allocated then allocate memory for download context
    * structure */
   phDnldNfc_SetHwDevHandle();
   wStatus = phDnldNfc_LoadFW(PLATFORM_LIB_PATH, &pImageInfo, &ImageInfoLen);
@@ -930,7 +930,7 @@ NFCSTATUS phDnldNfc_LoadPKInfo(void) {
   uint8_t* pImageInfo = NULL;
   uint32_t ImageInfoLen = 0;
 
-  /* if memory is not allocated then allocate memory for donwload context
+  /* if memory is not allocated then allocate memory for download context
    * structure */
   phDnldNfc_SetHwDevHandle();
 

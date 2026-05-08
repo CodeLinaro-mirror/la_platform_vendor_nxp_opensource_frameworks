@@ -669,7 +669,7 @@ NFCSTATUS NxpNTag::handleNTagNciNtf(uint8_t *pData, uint16_t dataLen) {
         pData[NCI_MSG_INDEX_FOR_FEATURE] == NCI_MSG_RF_DISCOVER)
       updateState(NTagState::NTAG_STATE_RF_DISCOVERY);
 
-    /* Replace RF_DIACTIVATE_IDLE notification with RF_DIACTIVATE_DISC
+    /* Replace RF_DEACTIVATE_IDLE notification with RF_DEACTIVATE_DISC
        notification to the upper layer when enabling or disabling the NTAG
        feature during an ongoing presence check
     */
@@ -726,7 +726,7 @@ NFCSTATUS NxpNTag::handleVendorNciRspNtf(uint16_t dataLen, uint8_t *pData) {
     return NFCSTATUS_EXTN_FEATURE_SUCCESS;
   }
 
-  // sending LPCD cmd afetr receiving deactivate to idle/disc ntf during screen
+  // sending LPCD cmd after receiving deactivate to idle/disc ntf during screen
   // off
   if (mNtagControl.isScreenOff) {
     if (dataLen == 5 &&
@@ -816,7 +816,7 @@ NFCSTATUS NxpNTag::handleVendorNciMessage(uint16_t dataLen, uint8_t *pData) {
         (pData[NCI_MSG_LEN_INDEX] == 0x04) && (pData[3] == 0x01) &&
         (pData[4] == 0x02) && (pData[5] == 0x01)) {
       if (pData[6] == CON_DISC_POLL_DISABLE) {
-        // Blocking con_disc_without_poll cmd during screenoff
+        // Blocking con_disc_without_poll cmd during screen-off
         // 20020401020100
         mNtagControl.isScreenOff = true;
         mNtagControl.mCurrentDiscCmd =

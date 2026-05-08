@@ -35,7 +35,7 @@ interface INxpNfc {
     setVendorParam(string key, string value)  generates (bool status);
 
     /*
-     * reset the ese based on resettype
+     * reset the ese based on resetType
      *
      * @param uint64_t to specify resetType
      * @return status as a boolean, true if success, false if failed
