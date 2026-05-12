@@ -19,8 +19,14 @@
 //Important Do Not change the order of DefaultEventHandler.h it leads to build failure*
 //The order is critical for correct compilation
 
-#include "DefaultEventHandler.h"
 #include "NfcExtensionApi.h"
+
+#include <phNxpLog.h>
+#include <stdint.h>
+
+#include "ConfigHandler.h"
+#include "DefaultEventHandler.h"
+#include "DualAntenna.h"
 #include "LxDebugHandler.h"
 #include "MposHandler.h"
 #include "NciCommandBuilder.h"
@@ -32,12 +38,9 @@
 #include "QTagHandler.h"
 #include "RfStateMonitor.h"
 #include "SrdHandler.h"
+#include "TransitConfigHandler.h"
 #include "phNxpAutoCard.h"
 #include "phNxpNTag.h"
-#include "DualAntenna.h"
-#include "TransitConfigHandler.h"
-#include <phNxpLog.h>
-#include <stdint.h>
 
 VendorExtnCb *mVendorExtnCb;
 
@@ -49,7 +52,7 @@ VendorExtnCb *mVendorExtnCb;
 #define NXP_EN_SN300U 1
 #define NXP_EN_SN330U 1
 #define NFC_NXP_MW_ANDROID_VER (17U)  /* Android version used by NFC MW */
-#define NFC_NXP_MW_VERSION_MAJ (0x05) /* MW Major Version */
+#define NFC_NXP_MW_VERSION_MAJ (0x06) /* MW Major Version */
 #define NFC_NXP_MW_VERSION_MIN (0x00) /* MW Minor Version */
 #define NFC_NXP_MW_CUSTOMER_ID (0x00) /* MW Customer Id */
 #define NFC_NXP_MW_RC_VERSION (0x00)  /* MW RC Version */
@@ -210,6 +213,7 @@ bool vendor_nfc_de_init() {
   NciStateMonitor::finalize();
   NciCommandBuilder::finalize();
   NfcExtensionWriter::finalize();
+  ConfigHandler::finalize();
   PlatformAbstractionLayer::finalize();
   ProprietaryExtn::finalize();
   AutoCard::finalize();

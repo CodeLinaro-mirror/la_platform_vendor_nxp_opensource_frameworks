@@ -1,6 +1,6 @@
 /**
  *
- *  Copyright 2025 NXP
+ *  Copyright 2025-2026 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -95,6 +95,30 @@ NfceeStateMonitor::processNfceeModeSetNtf(vector<uint8_t> &nfceeModeSetNtf) {
     PlatformAbstractionLayer::getInstance()->palenQueueRspNtf(
         eeUnrecoverableNtf.data(), eeUnrecoverableNtf.size());
     return NFCSTATUS_EXTN_FEATURE_FAILURE;
+  }
+  return NFCSTATUS_EXTN_FEATURE_FAILURE;
+}
+
+NFCSTATUS
+NfceeStateMonitor::processNfceeStatusNtf(vector<uint8_t>& nfceeStatusNtf) {
+  NXPLOG_EXTNS_D(NXPLOG_ITEM_NXP_GEN_EXTN, "NfceeStateMonitor %s Enter",
+                 __func__);
+  if (nfceeStatusNtf.size() == 5) {
+    const uint8_t nfcee_id = nfceeStatusNtf[NCI_EE_STATUS_NTF_EE_INDEX];
+    const uint8_t errorCode =
+        nfceeStatusNtf[NCI_EE_STATUS_NTF_REASON_CODE_INDEX];
+    if ((nfcee_id == NCI_ROUTE_ESE_ID) || (nfcee_id == NCI_ROUTE_EUICC1_ID) ||
+        (nfcee_id == NCI_ROUTE_EUICC2_ID)) {
+      if (errorCode == NCI_NFCEE_STS_PMUVCC_OFF ||
+          (errorCode & 0xF0) == NCI_NFCEE_STS_PROP_UNRECOVERABLE_ERROR) {
+        nfceeStatusNtf[NCI_EE_STATUS_NTF_REASON_CODE_INDEX] =
+            NCI_NFCEE_STS_UNRECOVERABLE_ERROR;
+      }
+    }
+  } else {
+    NXPLOG_EXTNS_E(NXPLOG_ITEM_NXP_GEN_EXTN,
+                   "NfceeStateMonitor %s Nfcee message invalid format",
+                   __func__);
   }
   return NFCSTATUS_EXTN_FEATURE_FAILURE;
 }

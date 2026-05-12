@@ -118,7 +118,7 @@ typedef struct phLibNfc_sConfig {
 typedef struct phLibNfc_Message {
   uint32_t eMsgType; /* Type of the message to be posted*/
   void* pMsgData;    /* Pointer to message specific data block in case any*/
-  uint32_t Size;     /* Size of the datablock*/
+  uint32_t Size;     /* Size of the data block*/
   uint8_t data[PHNCI_MAX_DATA_LEN]; /* Message data maintained with MAX*/
   NFCSTATUS w_status;               /* Status of the Transaction Completion*/
   ;

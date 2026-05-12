@@ -1478,7 +1478,8 @@ int phNxpNciHal_core_initialized(uint16_t core_init_rsp_params_len,
     num = 0;
     if ((GetNxpNumValue(NAME_NXP_CE_SUPPORT_IN_NFC_OFF_PHONE_OFF, &num,
                         sizeof(num))) &&
-        (IS_CHIP_TYPE_EQ(sn220u) || IS_CHIP_TYPE_EQ(sn300u))) {
+        (IS_CHIP_TYPE_EQ(sn220u) || IS_CHIP_TYPE_EQ(sn300u) ||
+         IS_CHIP_TYPE_EQ(pn560))) {
       if (num == ENABLE_T4T_CE) enable_ce_in_phone_off = num;
     }
     mEEPROM_info.buffer = &enable_ce_in_phone_off;
@@ -1970,6 +1971,16 @@ int phNxpNciHal_core_initialized(uint16_t core_init_rsp_params_len,
     }
   }
 
+  if (nxpncihal_ctrl.felica_filter_not_required) {
+    phNxpLog_enableLxLogging();
+    uint8_t enableAllTypeFFelica[] = {0x2F, 0x48, 0x02, 0x01, 0x01};
+    const NFCSTATUS enableAllTypeFFelicaStatus = phNxpNciHal_send_ext_cmd(
+        sizeof(enableAllTypeFFelica), enableAllTypeFFelica, &rsp_len, rsp);
+    if (enableAllTypeFFelicaStatus != NFCSTATUS_SUCCESS) {
+      NXPLOG_NCIHAL_E("enableAllTypeFFelicaStatus Command failed");
+    }
+  }
+
   if (buffer) {
     free(buffer);
     buffer = NULL;
@@ -2182,8 +2193,9 @@ int phNxpNciHal_close(bool bShutdown) {
    */
   if (!bShutdown && phNxpNciHal_getULPDetFlag() == false) {
     if ((IS_CHIP_TYPE_GE(sn100u) && IS_CHIP_TYPE_L(sn300u) &&
-         !IS_CHIP_TYPE_EQ(sn220u)) ||
-        ((IS_CHIP_TYPE_EQ(sn220u) || IS_CHIP_TYPE_EQ(sn300u)) &&
+         !IS_CHIP_TYPE_EQ(sn220u) && !IS_CHIP_TYPE_EQ(pn560)) ||
+        ((IS_CHIP_TYPE_EQ(sn220u) || IS_CHIP_TYPE_EQ(sn300u) ||
+          IS_CHIP_TYPE_EQ(pn560)) &&
          (GetNxpNumValue(NAME_NXP_CE_SUPPORT_IN_NFC_OFF_PHONE_OFF, &num,
                          sizeof(num))) &&
          ((num == NXP_PHONE_OFF_NFC_OFF_CE_NOT_SUPPORTED) ||
@@ -3825,6 +3837,31 @@ NFCSTATUS phNxpNciHal_send_get_cfgs() {
 void phNxpNciHal_configFeatureList(uint8_t* init_rsp, uint16_t rsp_len) {
   nxpncihal_ctrl.chipType = pConfigFL->processChipType(init_rsp, rsp_len);
   const tNFC_chipType chipType = nxpncihal_ctrl.chipType;
+  uint8_t isNxpNfcFLxNotifications = 0;
+
+  bool isNxpNfcFLxNotificationsFound =
+      GetNxpNumValue(NAME_NXP_NFC_F_LX_NOTIFICATION, &isNxpNfcFLxNotifications,
+                     sizeof(isNxpNfcFLxNotifications));
+
+  if (IS_CHIP_TYPE_GE(sn220u) && isNxpNfcFLxNotificationsFound &&
+      isNxpNfcFLxNotifications) {
+    uint8_t modelId = pConfigFL->getModelIdFromNciRsp(init_rsp, rsp_len);
+
+    unsigned long corePropSystemConfigVal = 0;
+    bool isNxpCorePropSystemConfigFound = GetNxpNumValue(
+        NAME_NXP_CORE_PROP_SYSTEM_DEBUG, &corePropSystemConfigVal,
+        sizeof(corePropSystemConfigVal));
+
+    if (!(modelId & LX_DEBUG_FELICA_MODEL_FLAG) &&
+        isNxpCorePropSystemConfigFound &&
+        ((corePropSystemConfigVal & LX_DEBUG_FELICA_SYS_CODE_FLAG) ||
+         (corePropSystemConfigVal & LX_DEBUG_FELICA_RF_FLAG))) {
+      NXPLOG_NCIHAL_D("%s Felica filter not required", __func__);
+      nxpncihal_ctrl.felica_filter_not_required = true;
+    } else {
+      nxpncihal_ctrl.felica_filter_not_required = false;
+    }
+  }
   bool is4KFragmentSupported = false;
   NXPLOG_NCIHAL_D("%s chipType = %s", __func__, pConfigFL->product[chipType]);
   CONFIGURE_FEATURELIST(chipType);

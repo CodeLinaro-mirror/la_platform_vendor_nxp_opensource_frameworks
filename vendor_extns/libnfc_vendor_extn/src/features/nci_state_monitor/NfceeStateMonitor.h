@@ -1,6 +1,6 @@
 /**
  *
- *  Copyright 2025 NXP
+ *  Copyright 2025-2026 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -55,6 +55,14 @@ private:
    * @param NFCEE_MODE_SET_NTF
    */
   NFCSTATUS processNfceeModeSetNtf(std::vector<uint8_t> &nfceeModeSetNtf);
+
+  /**
+   * @brief This API map proprietary error NFCEE_STATUS_NTF with
+   * UNRECOVERABLE_ERROR NFCEE_STATUS_NTF for eSE & eUICC.
+   *
+   * @param NFCEE_STATUS_NTF
+   */
+  NFCSTATUS processNfceeStatusNtf(std::vector<uint8_t>& nfceeStatusNtf);
 
   /**
    * @brief Set the currentEE on receiving ESE Mode set Cmd.

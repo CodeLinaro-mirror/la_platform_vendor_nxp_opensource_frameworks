@@ -162,6 +162,7 @@ cc_library_shared {
         "-DNXP_NFC_RECOVERY=TRUE",
         "-DNXP_QTAG=TRUE",
         "-DNXP_FORCE_FW_DOWNLOAD=1",
+        "-DNXP_BOOTTIME_UPDATE",
     ],
     srcs: [
         "halimpl_v2/dnld/phDnldNfc.cc",
@@ -225,6 +226,7 @@ cc_library_shared {
     include_dirs: [
         "hardware/nxp/nfc/snxxx/aidl/2.0",
         "hardware/nxp/secure_element/snxxx/extns/impl",
+        "hardware/nxp/secure_element/libese_vendor_extn/inc",
     ],
 
     shared_libs: [
